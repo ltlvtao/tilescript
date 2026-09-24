@@ -17,4 +17,4 @@ TileScript 是面向 AI 辅助优化的跨硬件 Tile 级编程语言：把优�
 
 ## 稳定基线
 
-（尚无归档 change；首个 capability 基线建立后在此登记索引。）
+- `language/syntax-acceptance-set`（2026-09-24，change `add-language-syntax-acceptance-set`）：M1 前端语法接受集——Python 3.10 载体（`tis.` 前缀、`.tis` 扩展名）、顶层/装饰器/签名/语句/表达式白名单与拒绝清单（`E0101`–`E0107`）、拒绝报告四要素契约。
