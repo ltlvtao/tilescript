@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "changeId": "add-language-syntax-acceptance-set",
+  "baseSha": "222e1a3649cba295c78e47da527a05e26ed6fc8b",
+  "note": "首个正式 change，纯规格先行：定义 M1 前端的语法接受集行为契约，无代码交付"
+}

@@ -12,8 +12,8 @@ TileScript 是面向 AI 辅助优化的跨硬件 Tile 级编程语言：显式�
 
 本仓库采用 OpenSpec 作为强制的软件开发流程。`openspec/` 是产品行为、公共契约和验收语义的权威来源。
 
-- **规格先行**：新增或修改以下语言行为前，必须先有 active OpenSpec change（`openspec/changes/<change>/`），不得把未定义行为直接写进实现：语法接受集与拒绝错误码（Python AST 子集边界）、类型规则与作用域转移、原词语义（`ts.*` 公共 API）、数值语义与跨硬件容差、错误码（E0xxx）、诊断 JSON Schema 及字段精度等级、HAL 能力描述字段语义、默认值与 Auto 行为的确定性、确定性编译承诺、portability 行为。
-- **破坏性变更**：改变语言语义、错误码、诊断 JSON Schema 兼容性或 `ts.*` API 签名的 change，必须在 proposal 中逐项标记 **BREAKING** 并说明影响面与迁移路径。性能数字属里程碑验收（`veps/` / designs 层面），不写入行为 spec。
+- **规格先行**：新增或修改以下语言行为前，必须先有 active OpenSpec change（`openspec/changes/<change>/`），不得把未定义行为直接写进实现：语法接受集与拒绝错误码（Python AST 子集边界）、类型规则与作用域转移、原词语义（`tis.*` 公共 API）、数值语义与跨硬件容差、错误码（E0xxx）、诊断 JSON Schema 及字段精度等级、HAL 能力描述字段语义、默认值与 Auto 行为的确定性、确定性编译承诺、portability 行为。
+- **破坏性变更**：改变语言语义、错误码、诊断 JSON Schema 兼容性或 `tis.*` API 签名的 change，必须在 proposal 中逐项标记 **BREAKING** 并说明影响面与迁移路径。性能数字属里程碑验收（`veps/` / designs 层面），不写入行为 spec。
 - **开发入口**：任何会修改生产代码或新增/实质修改 OpenSpec change 的任务，开始时使用 `tilescript-dev-workflow` skill（设计语义审查 → H1 人工确认 → 实施 → 代码语义审查 → H2 人工确认 → push → 归档）。
 - **低风险快速通道**（不建 change、不建审查账本）：纯文档修改；或可追溯到既有 Requirement/Scenario、不改公共契约的低风险修复（须复现 + 回归测试 + 一次代码语义审查）。任一条件无法证明时退出快速通道。
 - **实施阶段**默认只改 active change 和代码；specs/designs/overview 等长期基线文档在归档前按 change design 的"长期基线刷新计划"更新。

@@ -73,7 +73,7 @@ context: |
   - capabilities 组织约定：language/*（语法与类型系统）、primitives/*（原语族）、
     diagnostics/*（诊断 schema 与精度）、hal/*（硬件能力描述）、portability/*（跨
     硬件行为）；新增 capability 遵循该结构，不新建同义顶层目录。
-  - ts.* 公共 API（原语签名、装饰器、类型注解）的破坏性变更与语言语义变更同样必须在
+  - tis.* 公共 API（原语签名、装饰器、类型注解）的破坏性变更与语言语义变更同样必须在
     proposal 标记 BREAKING，并说明迁移路径或明确不提供。
 
   受约束自然语言：
@@ -164,7 +164,7 @@ rules:
       刷新计划"唯一承载。
     - |
       破坏性变更义务：改变语言语义（语法接受集、类型规则、原词语义、数值行为、错误码、
-      诊断 JSON Schema、确定性承诺）或 ts.* 公共 API 兼容性的 change，必须在 proposal
+      诊断 JSON Schema、确定性承诺）或 tis.* 公共 API 兼容性的 change，必须在 proposal
       的 What Changes 中逐项标记 BREAKING，并说明影响面与迁移路径（或明确不提供）；
       未标记的破坏性变更在设计审查中必须被指出。
   specs:
