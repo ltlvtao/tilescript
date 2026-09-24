@@ -1,0 +1,15 @@
+node_modules/
+
+# 本地环境与编辑器
+.DS_Store
+*.log
+.env
+.env.local
+
+# 构建产物
+dist/
+build/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+.venv/

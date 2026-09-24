@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# OpenSpec 门禁：commit 时校验全部 change/specs，失败阻断。
+if [ ! -d openspec ]; then
+  echo "[WARN GOV-OPENSPEC] openspec/ 目录不存在，跳过 OpenSpec 校验。"
+  exit 0
+fi
+if ! npx --no-install openspec validate --all --strict; then
+  echo "pre-commit: openspec validate --all --strict 未通过；修复后重新 commit。"
+  exit 1
+fi

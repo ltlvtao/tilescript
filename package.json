@@ -1,0 +1,19 @@
+{
+  "name": "tilescript",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TileScript：面向 AI 辅助优化的跨硬件 Tile 级编程语言（显式优化控制 + 结构化诊断 + 确定性编译）",
+  "scripts": {
+    "lint:openspec": "openspec validate --all --strict",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ltlvtao/tilescript.git"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@fission-ai/openspec": "^1.13.2",
+    "husky": "^9.1.7"
+  }
+}

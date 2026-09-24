@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# OpenSpec 门禁：push 前全量 strict 校验，失败阻断。
+zero="0000000000000000000000000000000000000000"
+while read -r local_ref local_sha pushed_ref pushed_sha; do
+  [ -n "$local_sha" ] || continue
+  [ "$local_sha" = "$zero" ] && continue
+  if [ -d openspec ]; then
+    if ! npx --no-install openspec validate --all --strict; then
+      echo "pre-push: openspec validate --all --strict 未通过；push 已阻断。"
+      exit 1
+    fi
+  else
+    echo "[WARN GOV-OPENSPEC] openspec/ 目录不存在，跳过 OpenSpec 校验。"
+  fi
+  break
+done
