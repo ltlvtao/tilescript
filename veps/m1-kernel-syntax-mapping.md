@@ -36,12 +36,12 @@ M1 时尚无四 kernel 的参考源码，按标准 Tile 实现形态保守推导
 
 | Kernel | 推导所需语法（超出 FA 案例的部分加粗） | 映射结果 |
 |---|---|---|
-| **MatMul**（M2-M3 验收"无 pipeline"形态） | `@tis.kernel` 签名（`Pointer[f16, Global]`×3、`comptime[int]` 含 `= 4096` 类字面量默认值）；赋值；嵌套 `for range`（bm/bn/bk tile 循环）；边界 tile `if`（尾块判断，比较 `<`）；`tis.make_tensor`/`alloc_shared`/`load`/`store`/`barrier`/`dot`（零初始化 `tis.zeros((BR,BC), f32, Register)`）/`block_idx` 调用；切片；算术 `* +` | 全部 ∈ FA 已核对集合：`if` 与比较 `<` ∈ R5 白名单 / R6 运算符白名单 ✅；无 produce/consume 需求（M1 无 pipeline）✅ |
-| **LayerNorm** | 行循环 `for range`；归约 `tis.reduce(axis=1, op=Sum)` 得 mean/var；中心化与归一化算术 `- * / +`；`tis.sqrt` 类原语调用；float 常量（eps）；`tis.store` | `- * / +` ∈ R6 算术白名单；float 常量 ∈ 数值常量 ✅；名称调用原语 ✅ |
-| **Softmax** | `tis.reduce(op=Max)`、`tis.exp`、减 max（`-`）、归一化（`/`）、行循环 `for range`、load/store | 全部 ∈ FA 已核对集合（Max/exp 均为名称调用原语，§7 `op=Max`/`ts.exp` 已锚定）✅ |
-| **Transpose** | 嵌套 `for range`（i/j）；整数下标 `A[i, j]` → `T[j, i]`（下标含常量与变量混合）；赋值；`tis.load`/`store` 或 `make_tensor` + copy | 下标 ∈ R6 白名单（§7 已含切片与 `[:, None]`，整数下标为其子形态）✅ |
+| **MatMul**（M2-M3 验收"无 pipeline"形态） | `@tis.kernel` 签名（`Pointer[f16, Global]`×3、`comptime[int]` 含 `= 4096` 类字面量默认值）；赋值；**嵌套 `for range`（bm/bn/bk tile 循环，§7 函数体无显式 for——循环由 pipeline 承载）**；**边界 tile `if`（尾块判断，比较 `<`）**；`tis.make_tensor`/`alloc_shared`/`load`/`store`/`barrier`/`dot`（零初始化 `tis.zeros((BR,BC), f32, Register)`）/`block_idx` 调用；切片；算术 `* +` | `for` ∈ R5 白名单、`if`/`elif`/`else` ∈ R5 白名单、比较 `<` ∈ R6 运算符白名单；其余 ∈ FA 已核对集合 ✅；无 produce/consume 需求（M1 无 pipeline）✅ |
+| **LayerNorm** | **行循环 `for range`**；归约 `tis.reduce(axis=1, op=Sum)` 得 mean/var；中心化与归一化算术 `- * / +`；`tis.sqrt` 类原语调用；**float 常量（eps，§7 正文数值常量均为 int）**；`tis.store` | `for` ∈ R5 白名单；`- * / +` ∈ R6 算术白名单；float 常量 ∈ R6 数值常量 ✅；名称调用原语 ∈ FA 已核对集合（`tis.log` 同类）✅ |
+| **Softmax** | `tis.reduce(op=Max)`、`tis.exp`、减 max（`-`）、归一化（`/`）、**行循环 `for range`**、load/store | `for` ∈ R5 白名单；Max/exp 均为名称调用原语，§7 `op=Max`/`tis.exp` 已锚定；其余 ∈ FA 已核对集合 ✅ |
+| **Transpose** | **嵌套 `for range`（i/j）**；**整数下标 `A[i, j]` → `T[j, i]`（变量下标，§7 仅出现切片与 `[:, None]`）**；赋值；`tis.load`/`store` 或 `make_tensor` + copy | `for` ∈ R5 白名单；下标 ∈ R6 白名单条目（"下标与切片"直接涵盖变量整数下标）✅；其余 ∈ FA 已核对集合 ✅ |
 
-**结论**：四 kernel 语法需求为 §7 案例已核对集合的**子集**，未出现任何需要扩展白名单的新类别；拒绝清单同样零命中。
+**结论**：四 kernel 语法需求**全部被 spec 白名单条目覆盖**，未出现任何需要扩展白名单的新类别；拒绝清单同样零命中。其中 `for range`、`if`、比较 `<`、float 常量、变量整数下标五类**超出 §7 案例实际使用的语法**（§7 函数体循环由 pipeline 承载、无分支语句），由白名单条目直接承载——白名单相对案例的"前瞻量"即此五类，均在 R5/R6 已定义条目内。
 
 ## 3. 错误码段位冲突核对（task 3）
 
