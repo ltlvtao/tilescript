@@ -48,7 +48,7 @@ JSONL 一行一条结论，格式：`{"cycle": 1, "round": 1, "decision": "PASS|
 
 1. 需求澄清用第一性原理拆解：先问诉求背后的根本问题，再判断方案形态。只有无法从权威资料推导且会改变业务结果、范围、成本、风险或授权的事实才请求人工决定。
 2. 调用 `openspec-propose` 起草 Change，运行 `npx openspec validate --all --strict`，通过后进入审查。
-3. 派发 1 个独立审查 subagent（fork，不继承主对话结论），输入六项：职责/写域、审查范围（proposal + specs + design 全文）、权威章节（CLAUDE.md + openspec/config.yaml + 相关 stable specs）、未闭环问题、验证摘要。审查者独立形成语义判断，覆盖：业务目标与授权范围、行为契约闭合（Requirement/Scenario 可验证）、方案正确性（架构/owner/数据/失败路径）、tasks 可验收性。
+3. 派发 1 个独立审查 subagent（fork，不继承主对话结论），输入六项：职责/写域、审查范围（proposal + specs + design 全文）、权威章节（CLAUDE.md + openspec/config.yaml + 相关 stable specs）、未闭环问题、验证摘要。审查者独立形成语义判断，覆盖：业务目标与授权范围、行为契约闭合（Requirement/Scenario 可验证）、语言语义与兼容性（语法接受集、数值语义、确定性影响声明、错误码与诊断 Schema 的 BREAKING 影响已按 config.yaml 规则声明）、方案正确性（架构/owner/数据/失败路径）、tasks 可验收性。
 4. 审查者返回 `CHANGES_REQUESTED` 时，主智能体汇总 finding 一次性修订、重新 strict validation，再派发影响复审（delta：相对前次已审内容的变化 + 未闭环项）。resolution 由原审查者在下一轮确认。全 `PASS` 提前结束；每 cycle 最多三轮，第三轮仍不一致时停止自动修订交作者。
 5. 请求 H1 时必须先呈报**自足的决策材料**：Change 目标与范围摘要（含非目标）、每轮审查结论与最终状态、全部 finding 清单（每项含严重度、一句话问题、闭环状态：已修复+验证/待处理/已协商关闭）、strict validation 结果、剩余风险与延期项。材料呈报后等待 Change 作者向 `h1.jsonl` 追加带当前 cycle 的 `APPROVED`/`CHANGES_REQUESTED`/`REJECTED`。进入实施前 H1 最后一条必须为 `APPROVED`；自动审查有分歧而 H1 批准时，H1 必须逐项关闭未解决的分歧 finding。
 

@@ -42,6 +42,40 @@ context: |
   - 本文件的 context 和 artifact rules 是项目级 OpenSpec 编写约束：context 适用于全部
     artifacts，artifact rule 只细化对应 artifact 且不得削弱 context。
 
+  语言设计不变量（裁决 API 争议的权威依据）：
+  - 显式优先：任何影响性能的决策用户必须能显式指定；未指定时使用固定、可预测、有文档
+    的默认值，编译器不做搜索、不自动降级。
+  - 一个概念一个原语：不允许同义原语并存（如 dot 的多种变体）。
+  - 每个原语都有诊断挂点：原语的 lowering 结果必须能在诊断 JSON 中以源码行号定位。
+  - 类型系统承担安全，不承担性能：scope 体系只保证不越界、不跨作用域误用。
+
+  语言规范专有规则：
+  - TileScript 是类 Python（Python AST 子集）的设备代码语言。语法的接受集与拒绝行为
+    是行为契约：接受哪些 Python 语法、拒绝哪些（含错误码）必须在 spec 定义，不得让
+    实现的解析器行为隐式决定语言边界。
+  - 宿主 Python 与设备代码的边界（哪些表达式编译期求值、哪些运行期执行、comptime 的
+    边界）是行为契约，属于 specs。
+  - 错误码（E0xxx）是稳定公共契约。定义错误码的 Requirement 必须覆盖：精确触发条件、
+    错误消息要素和恢复建议。新增错误码不破坏兼容；修改、删除或复用既有错误码编号是
+    破坏性变更，必须在 proposal 标记 BREAKING。
+  - 诊断 JSON Schema 是版本化公共契约：向后兼容承诺（字段只增不改不删、枚举只增、
+    语义变化用新字段）必须由 spec 定义；每个诊断字段必须声明精度等级（精确 / 静态估算
+    estimated / unknown），估算不得伪装精确。
+  - 确定性编译是横切契约：任何影响解析、类型检查、lowering 或代码生成的 change，其
+    design 必须声明对 deterministic_hash 的影响；禁止引入依赖时间、环境、随机源或
+    未排序遍历的编译行为。
+  - 数值语义必须闭合：浮点求值顺序、归约结合性、类型转换舍入规则和跨硬件数值一致性
+    容差必须在 spec 定义；改变数值行为的 change 必须包含数值一致性验证任务。
+  - 默认值与 Auto 行为必须满足三要件：选择算法确定性、写入文档、出现在诊断 JSON 中。
+    HAL 能力描述（含 mma_shapes 等列表的顺序语义）是公共契约，属于 specs。
+  - 性能数字属于里程碑验收（veps/designs 层面），不写入行为 spec；确需性能
+    Requirement 时必须定义基准、目标硬件、测量方法、测量边界和容差。
+  - capabilities 组织约定：language/*（语法与类型系统）、primitives/*（原语族）、
+    diagnostics/*（诊断 schema 与精度）、hal/*（硬件能力描述）、portability/*（跨
+    硬件行为）；新增 capability 遵循该结构，不新建同义顶层目录。
+  - ts.* 公共 API（原语签名、装饰器、类型注解）的破坏性变更与语言语义变更同样必须在
+    proposal 标记 BREAKING，并说明迁移路径或明确不提供。
+
   受约束自然语言：
 
   总目标：
@@ -128,6 +162,11 @@ rules:
     - |
       proposal 不得包含"归档前更新基线"或长期文档文件清单；这些由 design 的"长期基线
       刷新计划"唯一承载。
+    - |
+      破坏性变更义务：改变语言语义（语法接受集、类型规则、原词语义、数值行为、错误码、
+      诊断 JSON Schema、确定性承诺）或 ts.* 公共 API 兼容性的 change，必须在 proposal
+      的 What Changes 中逐项标记 BREAKING，并说明影响面与迁移路径（或明确不提供）；
+      未标记的破坏性变更在设计审查中必须被指出。
   specs:
     - |
       spec 的 Requirement 正文、Scenario 标题和 WHEN/THEN/AND 语句默认使用中文；BCP 14
@@ -147,9 +186,10 @@ rules:
       Scenario；相关 Scenarios 必须覆盖该行为实际存在的正常、边界和失败/降级验收路径。
       REMOVED 和 RENAMED 不要求 Scenario。
     - |
-      specs 只承载系统黑盒契约：语言原词语义、公共 API、错误码、诊断 JSON Schema、
-      确定性编译承诺和跨硬件可移植性行为属于 specs；内部 pass、IR 数据结构、模块组织、
-      调度机制和私有状态表示属于 design。
+      语言行为的 spec 归类：语法接受集与拒绝错误码、类型规则与作用域转移矩阵、原语
+      语义（含失败路径与错误码）、数值语义与跨硬件容差、诊断 JSON Schema 字段与精度
+      等级、HAL 能力描述字段语义、确定性承诺和 portability 行为都属于 specs；具体
+      后端 lowering 路径、pass 实现、IR 内部表示、Z3 验证机制和模块组织属于 design。
   design:
     - |
       design 的第一个正文 section 必须是"设计范围"：紧凑导航，说明每个受影响 capability
@@ -167,6 +207,10 @@ rules:
     - |
       design 必须包含"长期基线刷新计划"，按实际影响列出具体 stable spec、design 文档
       和 overview 目标；不受影响的类别明确写"无"。该计划是归档输入，不作为实施 task。
+    - |
+      影响解析、类型检查、lowering 或代码生成的 change，design 的"修改方案"必须包含
+      "确定性影响"说明：deterministic_hash 是否变化、变化的授权理由（如语义修正），
+      以及验证方式（重复编译 hash 一致性）。
     - |
       同一状态语义、API schema、数据 owner 或接口语义只能有一个主承载位置，其他位置
       只引用。
@@ -192,6 +236,10 @@ rules:
     - |
       勾选 task 前必须执行其验证并记录实际命令和结果；验证未通过时不得勾选，不得只写
       "测试通过"。长期基线更新由归档前流程执行，不作为实施阶段默认 checkbox。
+    - |
+      改变数值行为（求值顺序、归约结合性、cast 舍入、跨硬件一致性）的 task，验证必须
+      包含与参照实现的数值对比并声明容差；只断言"结果一致"而不定义容差不构成有效
+      验证。影响编译产物的 task 验证必须包含重复编译 hash 一致性检查。
 
 operations:
   apply:
