@@ -25,5 +25,5 @@
 
 #### Scenario: 状态构造实参类型不匹配被拒绝
 
-- **WHEN** 以 `Tensor[f16, (BR, BC), Register]` 为 `init` 实参构造期望标量的状态类字段
-- **THEN** 编译以 `E0303` 拒绝（状态类构造调用的实参绑定适用等价规则）
+- **WHEN** `AttnState(O_acc=..., m=m_new, l=l_new)` 中某关键字实参的类型与字段声明类型不等价（如以 `Tensor[f16, (BR, BC), Register]` 绑定声明为 `Tensor[f32, (BR,), Register]` 的 `m` 字段）
+- **THEN** 编译以 `E0303` 拒绝，报告定位该实参与两侧类型（状态类构造调用的实参绑定适用等价规则）

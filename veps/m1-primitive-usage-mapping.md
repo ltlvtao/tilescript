@@ -25,14 +25,14 @@
 | 12 | L493 `tis.load(V[j*BC:(j+1)*BC, :], buf.V, mode=Async)` | load Async ×2/2 | 同 #11（buf.V） | ✅ |
 | 13 | L497 `tis.zeros((BR, BC), f32, Register)` | zeros ×1/3（三位置） | R1：三位置实参 = 参数集总长 3（scope 按声明顺序位置传递）✅；R5：f32∈封闭集 ✅、shape comptime ✅、scope=`Register`∈{Register, Shared} ✅ → 返回 `Tensor[f32, (comptime BR, comptime BC), Register]`；作为 `tis.dot` 实参——dot 契约延期（计算原语 change），zeros 返回类型已定义 | ✅ |
 | 14 | L506 `tis.zeros((BR, D), f32, Register)` | zeros ×2/3 | 同 #13 | ✅ |
-| 15 | L510 `tis.zeros((BR, D), f32, Register)` | zeros ×3/3（init 内） | 同 #13；init 绑定本身走 type-system R7（非原语调用，E0303 适用）——zeros 返回类型满足 | ✅ |
+| 15 | L510 `tis.zeros((BR, D), f32, Register)` 与 L512 `tis.zeros((BR,), f32, Register)` | zeros ×3+4/4（init 内两处） | 同 #13（L512 为一维 `(BR,)` shape，同构）；init 绑定本身走 type-system R7（非原语调用，E0303 适用）——zeros 返回类型满足（O_acc/l 两字段均为 `Tensor[f32, …, Register]`，等价） | ✅ |
 | 16 | L511 `tis.full((BR,), -inf, f32, Register)` | full（四位置 + -inf） | R1：四位置实参 = 参数集总长 4 ✅；R5：value=`-inf` 为数学具名常量 `inf` 经一元负的表达式（R5 正文显式纳入）✅、f32 ✅、Register ✅ → 返回 `Tensor[f32, (comptime BR,), Register]`；`-inf`→f32 的数值表示延期数值语义 capability | ✅ |
 | 17 | L505 `tis.cast(P, f16)` | cast ×1/2（Tensor） | R1：两位置 ✅；R6：x=P 为 Tensor（P 首绑自 `tis.exp` 结果——结果类型依赖数值语义，**形态级核对**通过）✅、f16∈封闭集 ✅ → 返回 dtype 换 f16、shape/scope 不变（形态级） | ✅（形态级） |
 | 18 | L514 `tis.cast(st.O_acc / st.l[:, None], f16)` | cast ×2/2（派生表达式） | R1：两位置 ✅；R6：x 为除法表达式——结果类型依赖数值语义 capability，**形态级核对**通过（design/tasks 注明的依赖顺序限制）；f16 ✅ | ✅（形态级） |
 | 19 | L514 `tis.store(tis.cast(…), O[bm*BR:(bm+1)*BR, :])` | store ×1/2 | R1：两位置 ✅；R2：Register→Global = store 格 ✅（src 为 cast 结果、scope Register——形态级）；R3：dtype f16/f16 ✅、折叠 `BR` vs `comptime BR` 支 (d) ✅、`D` vs `D` 支 (a) ✅；R4：表达式语句 ✅ | ✅ |
-| 20 | L515 `tis.store(tis.log(st.l) + st.m, L[bm*BR:(bm+1)*BR])` | store ×2/2（一维） | R1：两位置 ✅；R2：Register→Global store 格 ✅；R3：一维——src 为算术表达式（形态级：`st.l` 为 `Tensor[f32, (BR,), Register]`，运算结果类型延期数值语义）、dst 切片折叠 `BR` vs L 的运行期 `seq_len` 维——src 形态级 `BR` 维与折叠后 `BR` 支 (a)/(d) 相容 ✅；dtype f32/f32 ✅；R4：表达式语句 ✅ | ✅（形态级） |
+| 20 | L515 `tis.store(tis.log(st.l) + st.m, L[bm*BR:(bm+1)*BR])` | store ×2/2（一维） | R1：两位置 ✅；R2：Register→Global store 格 ✅；R3：一维——src 为算术表达式（形态级：`st.l` 为 `Tensor[f32, (BR,), Register]`，运算结果类型延期数值语义）、dst 为运行期派生维（切片折叠 `BR`）——src 形态级 comptime `BR` 维与 dst 折叠 `BR` 相容（折叠支 (d)，代码审查 round 1 备注修正措辞）✅；dtype f32/f32 ✅；R4：表达式语句 ✅ | ✅（形态级） |
 
-十类充分性标准覆盖核对：load Sync（#9）、load Async（#11/12）、store×2（#19/20）、barrier（#10）、make_tensor×5（#1–5）、alloc_shared×3 含 swizzled（#6–8）、zeros×3（#13–15）、full 的 -inf 值（#16）、cast×2 含派生表达式（#17/18）、Layout.swizzled 参数（#6–8）——**全部覆盖，全部通过，零拒绝规则命中**。
+十类充分性标准覆盖核对：load Sync（#9）、load Async（#11/12）、store×2（#19/20）、barrier（#10）、make_tensor×5（#1–5）、alloc_shared×3 含 swizzled（#6–8）、zeros×4（#13–15，#15 覆盖 L510/L512 两处——代码审查 round 1 F1 修正计数）、full 的 -inf 值（#16）、cast×2 含派生表达式（#17/18）、Layout.swizzled 参数（#6–8）——**全部覆盖，全部通过，零拒绝规则命中**。
 
 ## 2. §7 出现的非本 change 原语（归属标注，映射完整性）
 
@@ -42,7 +42,7 @@
 | L488/L490/L495/L509 `tis.Pipeline`/`@pipe.produce`/`@pipe.consume`/`pipe.run`/`range` | Pipeline 机制 | 执行结构 capability |
 | L509 `tis.cdiv(seq_len, BC)` | 整除工具 | 执行结构/内建函数域 change |
 | L497/L505 `tis.dot`（含 `mma=`/`pad=`） | MMA 计算 | 计算原语 change（E0402/E0403 既有事实段） |
-| L497/L500 `tis.transpose`/`tis.reduce`、L501 `tis.maximum`、L502/503 `tis.exp`、L515 `tis.log` | 计算/归约原语 | 计算原语与数值语义 change |
+| L497/L500/L504 `tis.transpose`/`tis.reduce`、L501 `tis.maximum`、L502/503 `tis.exp`、L515 `tis.log` | 计算/归约原语 | 计算原语与数值语义 change |
 | L499 等 算术与比较运算 | 数值提升 | 数值语义 capability |
 
 ## 3. MODIFIED delta 影响核对（E0303 豁免边界扩展）
@@ -66,4 +66,4 @@
 
 ## 5. 结论
 
-§7 十类原语用法全部映射通过（两项 cast/store 派生表达式按声明的形态级限制核对）；拒绝规则（E0404/E0405/E0406/E0407）零误命中；MODIFIED 消除构造原语实参双解且非原语调用行为不变；错误码段位无冲突。`primitives/memory-ops` 对 M1 案例的原语边界充分性成立。
+§7 十类原语用法全部映射通过（共 21 处原语调用，两项 cast/store 派生表达式按声明的形态级限制核对；zeros 计数经代码审查 round 1 修正为 4 处）；拒绝规则（E0404/E0405/E0406/E0407）零误命中；MODIFIED 消除构造原语实参双解且非原语调用行为不变；错误码段位无冲突。`primitives/memory-ops` 对 M1 案例的原语边界充分性成立。

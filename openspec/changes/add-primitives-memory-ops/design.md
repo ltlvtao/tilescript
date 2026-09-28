@@ -51,7 +51,7 @@
 - **barrier 语义**：值域 {Block, WarpGroup}（§2.3 事实），默认 Block（§7 无参调用）；Block 模式定义汇合与跨线程可见性（Sync load 的可见性补充）；WarpGroup 模式的上下文约束（E0501 域）与汇合/可见性语义均让渡执行结构 capability（设计审查 round 1 minor 1 补汇合语义归属）。
 - **E04xx 段位语义精化**：段位解释从"计算原语"精化为"原语参数契约段"（计算原语是其子域）——与既有 `E0402`/`E0403` 不冲突且同化段位分配原则（段位=检查阶段：语法→类型→原语契约→执行结构）。新码按违规类别分配：`E0404`（格类别）/`E0405`（维度）/`E0406`（参数值域形态）/`E0407`（语境）；`E0408`–`E0499` 保留。
 - **段内 tiebreak**：`E0404`→`E0405`→`E0406`→`E0407`（先裁"哪个操作/格子"，再裁"数据对不对"，再裁"参数值合法否"，最后裁"位置对否"）；跨段 tiebreak 延伸 type-system 规则为 E01xx > E03xx > E04xx。
-- **充分性标准**：覆盖 §7 全部十类原语用法（load×2 模式、store×2、barrier、make_tensor×5、alloc_shared×3（swizzled）、zeros×3、full（-inf）、cast×2（Tensor/派生表达式）、Layout.swizzled 参数），核对任务见 tasks。
+- **充分性标准**：覆盖 §7 全部十类原语用法（load×2 模式、store×2、barrier、make_tensor×5、alloc_shared×3（swizzled）、zeros×4、full（-inf）、cast×2（Tensor/派生表达式）、Layout.swizzled 参数——zeros 计数经代码审查 round 1 修正），核对任务见 tasks。
 - **确定性影响**：本 change 无实现，不改变任何 `deterministic_hash`；"重复编译 E04xx 清单一致"为将来实现固化确定性要求。全部检查为编译期静态契约（参数形态、值域、格子、语境），不涉及运行时反馈（对齐编译器定位：本批原语的拒绝均为可静态化反馈）。
 
 质量属性影响：无新增黑盒质量目标（可验证性由各 Requirement 的 Scenario 承载）。
