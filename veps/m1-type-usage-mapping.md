@@ -34,7 +34,7 @@
 | 21 | L504 | `l_new = alpha * st.l + tis.reduce(P, axis=1, op=Sum)` | R6 首绑 + 字段访问（`st.l`）+ 让渡（reduce）；`* +` 提升延期 | ✅ |
 | 22 | L505-506 | `O_new = alpha[:, None] * st.O_acc + tis.dot(tis.cast(P, f16), buf.V, tis.zeros((BR, D), f32, Register))` | R6 广播维（`alpha[:, None]`）+ 字段访问（`st.O_acc`）+ 让渡（`tis.cast` 结果类型 `primitives/*`、`buf.V` 属性、dot/zeros 同 #15） | ✅ |
 | 23 | L507 | `return AttnState(O_acc=O_new, m=m_new, l=l_new)` | R5（状态类构造调用：关键字实参与同名字段一一绑定）+ R7（构造绑定受等价约束，返回值与返回注解 AttnState 同类名 nominal 等价）；三个实参的类型来源属让渡/延期域，绑定**义务**由 R5+R7 承载 | ✅ |
-| 24 | L509-512 | `st = pipe.run(range(tis.cdiv(seq_len, BC)), init=AttnState(…zeros…/full((BR,), -inf, f32, Register)/zeros…))` | `st` 首绑类型 = `pipe.run` 结果类型 → R6 让渡句**执行结构方法调用**分句（cycle 2 N3 闭合点）；`range(...)` → 让渡句**内建调用**分句（同）；`tis.cdiv` → `tis.*` 原语让渡；构造 `AttnState(…)` R5；`init=` 实参绑定 R7（非移动调用）+ 形参类型执行结构契约；`-inf`/`full` 值契约归 `primitives/*`；zeros 同 #15 | ✅ |
+| 24 | L509-512 | `st = pipe.run(range(tis.cdiv(seq_len, BC)), init=AttnState(…zeros…/full((BR,), -inf, f32, Register)/zeros…))` | `st` 首绑类型 = `pipe.run` 结果类型 → R6 让渡句**执行结构方法调用**分句（cycle 2 N3 闭合点）；`range(...)` → 让渡句**内建调用**分句（同）；`tis.cdiv` → `tis.*` 原语让渡；构造 `AttnState(…)` R5；`init=` 实参绑定 R7（非移动调用）+ 形参类型执行结构契约；`inf` 为数学具名常量——R6 常量段（类型地位由使用它的原语契约承载）；`full` 值契约归 `primitives/*`；zeros 同 #15 | ✅ |
 | 25 | L514 | `tis.store(tis.cast(st.O_acc / st.l[:, None], f16), O[bm*BR:(bm+1)*BR, :])` | R4 Register→Global store 格（合法）；R7 豁免（实参整体）；字段访问与 `[:, None]` R6；`/` 提升延期；`tis.cast` 让渡；`O[切片]` R6 | ✅ |
 | 26 | L515 | `tis.store(tis.log(st.l) + st.m, L[bm*BR:(bm+1)*BR])` | R4 Register→Global store（合法）；字段访问 R6；`+` 延期；`tis.log` 让渡；`L[切片]` R6（切片维运行期派生） | ✅ |
 
@@ -49,7 +49,7 @@
 
 | Kernel | 超出 §7 的类型用法 | 承载方 | 结果 |
 |---|---|---|---|
-| MatMul | comptime 默认值 `= 4096` 类大字面量（R2/R6/R3 同 #5）；嵌套 for 的循环变量（R6 首绑，range 结果类型让渡）；边界 tile `if` 比较 `<`（操作数提升延期数值语义） | 均在 §7 已核对形态或显式延期域内 | ✅ |
+| MatMul | comptime 默认值 `= 4096` 类大字面量（R2/R6/R3 同 #5）；嵌套 for 的循环变量（R6 首绑，range 结果类型让渡）；边界 tile `if` 比较 `<`（比较提升与 `if` 条件类型规则延期数值语义——R6 运算段） | 均在 §7 已核对形态或显式延期域内 | ✅ |
 | LayerNorm | float 常量 eps（float 字面量到 dtype 标量位置的绑定规则——R6 常量段显式延期数值语义）；`tis.sqrt` 类原语（让渡） | 显式延期/让渡 | ✅ |
 | Softmax | `tis.reduce(op=Max)`、`tis.exp`（让渡，§7 #17/#19 同类） | 让渡 | ✅ |
 | Transpose | 变量整数下标 `A[i, j]`（R6 整数下标消维——基对象 Tensor、结果消去该维）；`T[j, i]` 赋值（R6 首绑/再绑定） | R6 已定义条目 | ✅ |

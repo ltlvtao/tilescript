@@ -4,7 +4,7 @@
 
 ### Requirement: 类型表达式结构规则
 
-通过语法接受集形式检查（`E0104`）的类型注解，其内部结构 MUST 满足：dtype 属于封闭集合 `f16`、`bf16`、`f32`、`f8e4m3`、`i8`、`i32`（六种，MUST NOT 出现自定义 dtype）；scope 属于封闭集合 `Global`、`Shared`、`Register`（三种）。`Tensor[dtype, shape, scope]` MUST 按该顺序携带恰好三个必选参数，MAY 携带可选第四参数 `layout`，`layout` 的唯一合法值为 `RowMajor`（默认值，固定且写进文档；未来扩展只能经显式 change 修改本 Requirement）。`Pointer[dtype, scope]` MUST 按该顺序携带恰好两个参数。类型注解结构不满足上述规则（参数数量、顺序错误，未知 dtype，未知 scope）时，编译器 MUST 以 `E0302` 拒绝；报告 MUST 包含行列位置、被违反的结构规则与恢复建议（给出最近的合法形式）。
+类型注解——无论出现在 kernel 签名（语法层经 `E0104` 检查形式类别）、`@tis.state` 字段（经 `E0107`）还是 Pipeline `produce`/`consume` 嵌套函数签名（语法层不检查注解类别）——其内部结构 MUST 满足：dtype 属于封闭集合 `f16`、`bf16`、`f32`、`f8e4m3`、`i8`、`i32`（六种，MUST NOT 出现自定义 dtype）；scope 属于封闭集合 `Global`、`Shared`、`Register`（三种）。`Tensor[dtype, shape, scope]` MUST 按该顺序携带恰好三个必选参数，MAY 携带可选第四参数 `layout`，`layout` 的唯一合法值为 `RowMajor`（默认值，固定且写进文档；未来扩展只能经显式 change 修改本 Requirement）。`Pointer[dtype, scope]` MUST 按该顺序携带恰好两个参数。类型注解结构不满足上述规则（参数数量、顺序错误，未知 dtype，未知 scope）时，编译器 MUST 以 `E0302` 拒绝；报告 MUST 包含行列位置、被违反的结构规则与恢复建议（给出最近的合法形式）。
 
 #### Scenario: 合法类型表达式通过结构检查
 
@@ -142,9 +142,9 @@ shape 维度等价判定：两边同为编译期常量且值相等；或两边�
 
 类型检查的输入侧规则：设备代码变量在**首次绑定**（赋值、形参绑定、构造）时确定类型，此后单类型不变量——后续再绑定 MUST 与已确定类型等价，否则按「类型不匹配拒绝」报告 `E0303`；名称引用的结果类型为变量的绑定类型。对状态类类型值的字段访问，结果类型为该字段的声明类型。模块属性（`tis.*`）与 Pipeline buffer 属性（如 `buf.K`）访问及**原语调用表达式**的结果类型由 `primitives/*` 与执行结构 capability 的契约定义；执行结构方法调用（如 `pipe.run(...)`）与内建调用（如 `range(...)`）的结果类型由执行结构 capability 的契约定义；本 capability 对上述各类表达式的结果类型均不定义。状态类构造调用的类型规则由「状态类类型与字段约束」承载。
 
-**下标与切片**：基对象 MUST 为 `Tensor`（基对象为标量或状态类类型时按 `E0303` 拒绝）；结果为同 dtype、同 scope 的 `Tensor`，shape 逐维变换——整数下标消去该维；切片 `a:b` 保留该维（两边边界均为编译期常量时结果维度为编译期常量，否则为运行期派生维度）；`:` 全取保留该维；`None` 新增大小为 `1` 的编译期常量维度。两个运行期派生维度在其派生表达式结构等价（相同运算与逐操作数等价）时判定等价。
+**下标与切片**：基对象 MUST 为 `Tensor`，其余任何类别（标量、状态类类型、`Pointer` 等）按 `E0303` 拒绝；结果为同 dtype、同 scope 的 `Tensor`，shape 逐维变换——整数下标消去该维；切片 `a:b` 保留该维（两边边界均为编译期常量时结果维度为编译期常量，否则为运行期派生维度）；`:` 全取保留该维；`None` 新增大小为 `1` 的编译期常量维度。两个运行期派生维度在其派生表达式结构等价（相同运算与逐操作数等价）时判定等价。
 
-**常量**：int 字面量（四种进制形式）是 `comptime[int]` 的值（单向兼容到 `int` 位置）；布尔常量与 `None` 的类型地位由使用它们的原语契约承载；float 字面量到 dtype 标量位置的绑定规则由数值语义 capability 承载。**算术与比较运算**的操作数与结果类型提升规则由数值语义 capability 承载（本 capability 非目标）。
+**常量**：int 字面量（四种进制形式）是 `comptime[int]` 的值（单向兼容到 `int` 位置）；布尔常量、`None` 与数学具名常量（如 `inf`）的类型地位由使用它们的原语契约承载；float 字面量到 dtype 标量位置的绑定规则由数值语义 capability 承载。**算术、比较与逻辑运算**（含 `and`/`or`/`not`）及 `if`/`elif` 条件的操作数与结果类型规则由数值语义 capability 承载（本 capability 非目标）。
 
 #### Scenario: 单类型不变量违规被拒绝
 
