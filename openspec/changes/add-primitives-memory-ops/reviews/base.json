@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "changeId": "add-primitives-memory-ops",
+  "baseSha": "28f30a03f41e1693698f6d6fdb69acc5b2f55811",
+  "note": "纯规格先行 change：定义 primitives/memory-ops 行为契约（存取/分配/转换原语的参数契约、转移格承载、完成语义与 E0404–E0407），无代码交付"
+}
