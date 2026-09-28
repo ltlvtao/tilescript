@@ -173,27 +173,27 @@ shape 维度等价判定：两边同为编译期常量且值相等；或两边�
 
 类型绑定位置——赋值的目标与源、调用的实参与形参、`return` 值与返回注解——两侧类型 MUST 等价，或满足单向兼容（`comptime[int]` 值用于 `int` 位置）。不满足时，编译器 MUST 以 `E0303` 拒绝；报告 MUST 包含行列位置、两侧类型与绑定位置类别，恢复建议按差异组件给出（dtype 不同建议显式 cast 原语、scope 不同建议显式移动原语、shape 不同建议核对维度、种类不同建议核对标量种类）。
 
-本 Requirement 的等价规则适用于赋值、返回绑定与**非数据移动**调用的实参绑定。显式数据移动原语（初始集合为 `tis.load` 与 `tis.store`，权威集合由 `primitives/*` 定义）的实参**整体**不适用等价规则：其实参 scope 组合由「作用域转移矩阵」裁决（`E0301`），其余维度（dtype、shape 等）由该原语在 `primitives/*` 中的参数契约承载，均 MUST NOT 按本 Requirement 报告 `E0303`。普通赋值语句 MUST NOT 承载跨 scope 数据移动：赋值两侧 scope 不同时按本 Requirement 以 `E0303` 拒绝（类型不等价），跨 scope 移动必须使用显式移动原语。
+本 Requirement 的等价规则适用于赋值、返回绑定与非原语调用的实参绑定（状态类构造调用、执行结构方法与内建调用等）。`tis.*` 原语调用表达式的实参整体不适用等价规则：数据移动原语的实参 scope 组合由「作用域转移矩阵」裁决（`E0301`），全部原语实参的形态与值域约束由该原语在 `primitives/*` 中的参数契约承载（`E04xx`），均 MUST NOT 按本 Requirement 报告 `E0303`。原语的参数契约随各 primitives change 逐个定义，其权威集合以已归档的 `primitives/*` specs 为准。普通赋值语句 MUST NOT 承载跨 scope 数据移动：赋值两侧 scope 不同时按本 Requirement 以 `E0303` 拒绝（类型不等价），跨 scope 移动必须使用显式移动原语。
 
 #### Scenario: dtype 不匹配的赋值被拒绝
 
-- **WHEN** 将 `Tensor[f16, (64, 64), Register]` 的值赋给 `Tensor[f32, (64, 64), Register]` 类型的目标
-- **THEN** 编译以 `E0303` 拒绝，报告两侧类型，恢复建议使用 `tis.cast` 显式转换 dtype
+- **WHEN** 将 `Tensor[f16, …]` 值赋给 `Tensor[f32, …]` 目标
+- **THEN** 编译以 `E0303` 拒绝，报告包含两侧类型与绑定位置类别，恢复建议使用显式转换原语
 
 #### Scenario: scope 不匹配的赋值被拒绝并指向显式原语
 
-- **WHEN** 将 Shared scope Tensor 赋给 Register scope 目标（普通赋值，非移动原语调用）
-- **THEN** 编译以 `E0303` 拒绝（赋值不承载跨 scope 移动），恢复建议使用 `tis.load` 显式转移
+- **WHEN** 将 `Tensor[f16, …, Register]` 值赋给 `Tensor[f16, …, Shared]` 目标
+- **THEN** 编译以 `E0303` 拒绝，恢复建议使用显式移动原语承载跨 scope 移动
 
 #### Scenario: comptime 值绑定 int 位置被接受
 
-- **WHEN** 将编译期常量 `64` 绑定到接受 `int` 的形参位置
-- **THEN** 单向兼容成立，类型检查通过
+- **WHEN** 以 `comptime[int]` 常量 `64` 为实参调用接受 `int` 形参的函数
+- **THEN** 单向兼容规则接受该绑定（不产生 `E0303`）
 
 #### Scenario: 状态构造实参类型不匹配被拒绝
 
-- **WHEN** `AttnState(O_acc=..., m=m_new, l=l_new)` 中某关键字实参的类型与字段类型不等价
-- **THEN** 编译以 `E0303` 拒绝，报告定位该实参与两侧类型
+- **WHEN** `AttnState(O_acc=..., m=m_new, l=l_new)` 中某关键字实参的类型与字段声明类型不等价（如以 `Tensor[f16, (BR, BC), Register]` 绑定声明为 `Tensor[f32, (BR,), Register]` 的 `m` 字段）
+- **THEN** 编译以 `E0303` 拒绝，报告定位该实参与两侧类型（状态类构造调用的实参绑定适用等价规则）
 
 ### Requirement: 类型检查报告契约与 E03xx 段位
 

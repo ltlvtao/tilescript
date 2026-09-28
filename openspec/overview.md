@@ -18,4 +18,5 @@ TileScript 是面向 AI 辅助优化的跨硬件 Tile 级编程语言：把优�
 ## 稳定基线
 
 - `language/syntax-acceptance-set`（2026-09-24，change `add-language-syntax-acceptance-set`）：M1 前端语法接受集——Python 3.10 载体（`tis.` 前缀、`.tis` 扩展名）、顶层/装饰器/签名/语句/表达式白名单与拒绝清单（`E0101`–`E0107`）、拒绝报告四要素契约。
-- `language/type-system`（2026-09-28，change `add-language-type-system`）：类型系统行为契约——类型表达式结构与 dtype/scope 封闭集合（`E0302`）、三类标量种类与 shape 组件、类型等价（逐组件/符号维度/派生维度结构等价）、3×3 作用域转移矩阵（`E0301`，历史码语义不变）、状态类类型与字段约束（nominal 等价、`E0304`）、表达式结果类型规则（单类型不变量、切片/广播维变换、primitives/执行结构/数值语义显式让渡）、类型不匹配（`E0303`，数据移动原语实参整体豁免）、E03xx 报告契约与段内 tiebreak。
+- `language/type-system`（2026-09-28，change `add-language-type-system`）：类型系统行为契约——类型表达式结构与 dtype/scope 封闭集合（`E0302`）、三类标量种类与 shape 组件、类型等价（逐组件/符号维度/派生维度结构等价）、3×3 作用域转移矩阵（`E0301`，历史码语义不变）、状态类类型与字段约束（nominal 等价、`E0304`）、表达式结果类型规则（单类型不变量、切片/广播维变换、primitives/执行结构/数值语义显式让渡）、类型不匹配（`E0303`，`tis.*` 原语调用实参整体豁免——原为数据移动原语，`add-primitives-memory-ops` 于 2026-09-28 扩展）、E03xx 报告契约与段内 tiebreak。
+- `primitives/memory-ops`（2026-09-28，change `add-primitives-memory-ops`）：核心存取原语行为契约——八原语（load/store/barrier/make_tensor/alloc_shared/zeros/full/cast）参数集与封闭性（`E0406`）、转移格承载映射（load 三格/store 三格/copy+move 无承载，`E0404`）、逐维长度相容判定（`E0405`，静态折叠支）、Sync 完成/Async 仅 Pipeline 语境（`E0407`）、分配与视图构造（swizzled 为分配物理属性不进类型组件）、cast 全六 dtype 开放、barrier Block 汇合可见性、E04xx 报告契约与段内 tiebreak；含 `language/type-system`「类型不匹配拒绝」BREAKING 修订（E0303 豁免边界扩展）。
