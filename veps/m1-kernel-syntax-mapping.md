@@ -6,7 +6,7 @@
 
 ## 1. FlashAttention（§7 完整案例逐构造映射）
 
-§7 源码剔除 `module flash_attention:` 伪代码行后逐构造核对（前缀按命名裁决映射 `ts.` → `tis.`）：
+§7 源码剔除 `module flash_attention:` 伪代码行后逐构造核对（前缀按命名裁决映射 `tis.` → `tis.`）：
 
 | 源码构造 | 所属 Requirement | 白名单条目 | 结果 |
 |---|---|---|---|
@@ -22,11 +22,11 @@
 | `@pipe.produce def fetch(...)` / `@pipe.consume def attend(...)` | R3/R5 | 按属性名识别的嵌套函数装饰器；嵌套函数定义白名单 | ✅ |
 | `fetch(j: int, buf)` 中 `buf` 无注解 | R4 | E0104 仅约束设备入口函数，不约束 produce/consume 嵌套函数 | ✅（不触发） |
 | `Q[bm*BR:(bm+1)*BR, :]`、`m_new[:, None]` | R6 | 切片下标（含元组形态 `[:, None]`）；算术 `*` `+` | ✅ |
-| `S = tis.dot(..., mma=tis.MMA(16, 8, 16), pad=tis.PadPolicy.Error)` | R5/R6 | 赋值；调用链与属性访问；元组实参 `ts.zeros((BR, BC), f32, Register)` | ✅ |
-| `S = S * scale`、`alpha = ts.exp(st.m - m_new)`、`l_new = alpha * st.l + tis.reduce(...)`、`O_new = alpha[:, None] * st.O_acc + tis.dot(...)` | R5/R6 | 赋值；算术 `* + -`；调用；属性；切片 | ✅ |
+| `S = tis.dot(..., mma=tis.MMA(16, 8, 16), pad=tis.PadPolicy.Error)` | R5/R6 | 赋值；调用链与属性访问；元组实参 `tis.zeros((BR, BC), f32, Register)` | ✅ |
+| `S = S * scale`、`alpha = tis.exp(st.m - m_new)`、`l_new = alpha * st.l + tis.reduce(...)`、`O_new = alpha[:, None] * st.O_acc + tis.dot(...)` | R5/R6 | 赋值；算术 `* + -`；调用；属性；切片 | ✅ |
 | `return AttnState(O_acc=O_new, m=m_new, l=l_new)` | R5/R6 | return；名称调用与关键字实参 | ✅ |
 | `st = pipe.run(range(tis.cdiv(seq_len, BC)), init=AttnState(..., m=tis.full((BR,), -inf, f32, Register), ...))` | R5/R6 | 赋值；调用实参位置的 `range(...)`；元组实参 `(BR,)`；`-inf` = 一元负+名称引用 | ✅ |
-| `ts.store(ts.cast(st.O_acc / st.l[:, None], f16), ...)`、`ts.store(ts.log(st.l) + st.m, ...)` | R5/R6 | 表达式语句；除法 `/`；切片；调用 | ✅ |
+| `tis.store(tis.cast(st.O_acc / st.l[:, None], f16), ...)`、`tis.store(tis.log(st.l) + st.m, ...)` | R5/R6 | 表达式语句；除法 `/`；切片；调用 | ✅ |
 
 **结论**：拒绝清单（while/match/break/continue/try/raise/assert/del/global/nonlocal/AnnAssign/设备内 import/设备内类定义；lambda/推导/f-string/yield/await/星号解包/海象/三元/链式比较/白名单外运算符/字符串越位）**零命中**。
 

@@ -88,7 +88,7 @@
 ### 2.1 设计原则（用于裁决所有 API 争议）
 
 1. **显式优先**：任何影响性能的决策，用户必须能显式指定；未指定时编译器用**固定、可预测、有文档**的默认值，不做搜索
-2. **一个概念一个原语**：不允许 `ts.dot` / `ts.dot_tensorcore` / `ts.dot_simd` 三个并存。原方案的混用在此废止
+2. **一个概念一个原语**：不允许 `tis.dot` / `tis.dot_tensorcore` / `tis.dot_simd` 三个并存。原方案的混用在此废止
 3. **每个原语都有诊断挂点**：原语的 lowering 结果必须能在诊断 JSON 中以源码行号定位
 4. **类型系统承担安全，不承担性能**：MemoryScope as Type 只保证不越界、不跨作用域误用；性能好坏交给用户和诊断
 
@@ -115,32 +115,32 @@ comptime[int]
 **Pipeline 状态类型**（原方案用 dict 又用点号访问，此处正式定义）：
 
 ```python
-@ts.state
+@tis.state
 class AttnState:
     O_acc: Tensor[f32, (BR, D), Register]
     m:     Tensor[f32, (BR,), Register]
     l:     Tensor[f32, (BR,), Register]
 ```
 
-`@ts.state` 是一个纯数据结构体，所有字段必须是 Register scope（Pipeline 迭代间携带的状态不能藏在 Shared 里，否则同步语义不清）。
+`@tis.state` 是一个纯数据结构体，所有字段必须是 Register scope（Pipeline 迭代间携带的状态不能藏在 Shared 里，否则同步语义不清）。
 
 ### 2.3 核心原语（统一版）
 
 #### 内存操作
 
 ```python
-ts.load(src, dst, mode=Sync|Async, group=None)   # 跨 scope 拷贝
-ts.store(src, dst)
-ts.commit_group() -> GroupHandle
-ts.wait_group(handle | pending_count: int)
-ts.barrier(scope=Block|WarpGroup)
-ts.atomic_add(src: Register, dst: Global)
+tis.load(src, dst, mode=Sync|Async, group=None)   # 跨 scope 拷贝
+tis.store(src, dst)
+tis.commit_group() -> GroupHandle
+tis.wait_group(handle | pending_count: int)
+tis.barrier(scope=Block|WarpGroup)
+tis.atomic_add(src: Register, dst: Global)
 ```
 
 #### 计算原语——只有一个 dot
 
 ```python
-ts.dot(
+tis.dot(
     A: Tensor[..., (M, K), Shared|Register],
     B: Tensor[..., (K, N), Shared|Register],
     C: Tensor[f32, (M, N), Register],
@@ -151,18 +151,18 @@ ts.dot(
 ```
 
 - `mma=Auto` 时，编译器选择 HAL 报告的**第一个**可用形状（NVIDIA H200: m16n8k16；Ascend 910B: m16n16k16），这个选择是确定性的、写进文档的，并出现在诊断 JSON 里
-- 用户/AI 可用 `mma=ts.MMA(16, 8, 32)` 覆盖，如果硬件不支持则编译错误 E0402，错误信息列出该硬件支持的所有形状
+- 用户/AI 可用 `mma=tis.MMA(16, 8, 32)` 覆盖，如果硬件不支持则编译错误 E0402，错误信息列出该硬件支持的所有形状
 - 回退到 SIMD 路径**不会自动发生**。如果 tile 形状不能用 Tensor Core，报错 E0403 并建议 pad 策略。原则：编译器不替你降级性能
 
 #### Warp 特化（一等公民）
 
 ```python
-with ts.warp_group(role="producer", warps=2) as pg:
+with tis.warp_group(role="producer", warps=2) as pg:
     # 只允许 load/commit/barrier，出现 dot 则编译错误 E0501
     ...
-with ts.warp_group(role="consumer", warps=6) as cg:
+with tis.warp_group(role="consumer", warps=6) as cg:
     ...
-ts.warp_group_sync(pg, cg, barrier_id=0)
+tis.warp_group_sync(pg, cg, barrier_id=0)
 ```
 
 在 Ascend 上，`warp_group` lower 为 AI Core 内 Vector/Cube 单元的角色分工（这在 Ascend 上是自然的——它本来就是异构单元），HAL 报告 `warp_group.max_roles`。
@@ -170,14 +170,14 @@ ts.warp_group_sync(pg, cg, barrier_id=0)
 #### 归约
 
 ```python
-ts.reduce(x, axis, op=Sum|Max, scope=Auto|Warp|Block)
+tis.reduce(x, axis, op=Sum|Max, scope=Auto|Warp|Block)
 ```
 
 `scope=Auto` 在 NVIDIA 上选 Warp（`__shfl_sync`），在 Ascend 上选 Block（无 warp 概念）。不提供 `warp_reduce_sum` 这种硬件专用名字——用户写 `if warp_size > 0` 分支的代码在原方案里出现过，这违背了 HAL 的意义，废止。
 
 ### 2.4 形状不匹配策略（对 Review 第二段疑问 1 的回应）
 
-`ts.dot` 的 M/N/K 不能被 MMA 形状整除时，四种策略，用户必须显式选择：
+`tis.dot` 的 M/N/K 不能被 MMA 形状整除时，四种策略，用户必须显式选择：
 
 | PadPolicy | 行为 | 性能影响 | 诊断中的体现 |
 |-----------|------|----------|--------------|
@@ -191,15 +191,15 @@ ts.reduce(x, axis, op=Sum|Max, scope=Auto|Warp|Block)
 ### 2.5 Pipeline 抽象
 
 ```python
-pipe = ts.Pipeline(stages=3, buffers={"K": K_shared, "V": V_shared})
+pipe = tis.Pipeline(stages=3, buffers={"K": K_shared, "V": V_shared})
 
 @pipe.produce
-def fetch(j: int, buf: ts.BufferSlot):
-    ts.load(K[j*BC:(j+1)*BC, :], buf.K, mode=Async)
-    ts.load(V[j*BC:(j+1)*BC, :], buf.V, mode=Async)
+def fetch(j: int, buf: tis.BufferSlot):
+    tis.load(K[j*BC:(j+1)*BC, :], buf.K, mode=Async)
+    tis.load(V[j*BC:(j+1)*BC, :], buf.V, mode=Async)
 
 @pipe.consume
-def compute(j: int, buf: ts.BufferSlot, st: AttnState) -> AttnState:
+def compute(j: int, buf: tis.BufferSlot, st: AttnState) -> AttnState:
     ...
     return st
 
@@ -215,15 +215,15 @@ state = pipe.run(range(num_blocks), init=AttnState(...))
 ### 2.6 Persistent Kernel 与跨 Kernel 融合
 
 ```python
-@ts.persistent_kernel(scheduler=ts.TileScheduler.RoundRobin)
+@tis.persistent_kernel(scheduler=tis.TileScheduler.RoundRobin)
 def gemm_persistent(...):
-    for tile in ts.tile_iter():     # 每个 CTA 循环领取 tile
+    for tile in tis.tile_iter():     # 每个 CTA 循环领取 tile
         ...
 
-@ts.fused_kernel
+@tis.fused_kernel
 def gemm_gelu(...):
     C = gemm_body(...)
-    return ts.elementwise(C, gelu)  # 融合到 epilogue，不落 Global
+    return tis.elementwise(C, gelu)  # 融合到 epilogue，不落 Global
 ```
 
 这两项 1.0 只在 NVIDIA 上提供；Ascend 的 persistent 语义需要 CANN 侧的 task scheduler 配合，标注为 1.1。
@@ -309,7 +309,7 @@ def gemm_gelu(...):
 def optimize(kernel_src, target, budget_rounds=20, llm=...):
     best = compile_and_bench(kernel_src, target)
     for r in range(budget_rounds):
-        diag = ts.diagnose(kernel_src, target, profile=(r % 5 == 0))
+        diag = tis.diagnose(kernel_src, target, profile=(r % 5 == 0))
         proposal = llm.propose(kernel_src, diag, history)
         result = compile_and_bench(proposal, target)
         if not result.ok:              # 编译错误也是结构化的，回给 LLM
@@ -358,7 +358,7 @@ persistent_kernel: false                  # 1.1
 Ascend 的 UB 不再由编译器"自动选择"（原方案的 `if data_size < 64KB` 启发式违背了设计原则 1）。改为：
 
 - `Shared` scope 在 Ascend 上默认映射到 L1 Buffer
-- 用户可显式写 `ts.alloc_shared(..., hint=ts.Placement.Fast)`，在 Ascend 映射到 UB，在 NVIDIA 无操作
+- 用户可显式写 `tis.alloc_shared(..., hint=tis.Placement.Fast)`，在 Ascend 映射到 UB，在 NVIDIA 无操作
 - 诊断 JSON 的 `portability` 段会提示"此 tensor 大小 48KB 且流式访问，在 Ascend 上建议 `Placement.Fast`"——**建议由诊断给出，决策由用户/AI 做**
 
 ### 4.3 后端实现策略
@@ -458,13 +458,13 @@ M9-M10           打磨 + 发布
 ```python
 module flash_attention:
 
-@ts.state
+@tis.state
 class AttnState:
     O_acc: Tensor[f32, (BR, D), Register]
     m:     Tensor[f32, (BR,), Register]
     l:     Tensor[f32, (BR,), Register]
 
-@ts.kernel
+@tis.kernel
 def flash_attn_fwd(
     Q_ptr: Pointer[f16, Global], K_ptr: Pointer[f16, Global],
     V_ptr: Pointer[f16, Global], O_ptr: Pointer[f16, Global],
@@ -473,46 +473,46 @@ def flash_attn_fwd(
     D: comptime[int] = 64, BR: comptime[int] = 64,
     BC: comptime[int] = 64, STAGES: comptime[int] = 2
 ):
-    bm = ts.block_idx(0)
-    Q = ts.make_tensor(Q_ptr, (seq_len, D)); K = ts.make_tensor(K_ptr, (seq_len, D))
-    V = ts.make_tensor(V_ptr, (seq_len, D)); O = ts.make_tensor(O_ptr, (seq_len, D))
-    L = ts.make_tensor(L_ptr, (seq_len,))
+    bm = tis.block_idx(0)
+    Q = tis.make_tensor(Q_ptr, (seq_len, D)); K = tis.make_tensor(K_ptr, (seq_len, D))
+    V = tis.make_tensor(V_ptr, (seq_len, D)); O = tis.make_tensor(O_ptr, (seq_len, D))
+    L = tis.make_tensor(L_ptr, (seq_len,))
 
-    Q_s = ts.alloc_shared((BR, D), f16, layout=ts.Layout.swizzled(xor=0b11100))
-    K_s = ts.alloc_shared((BC, D), f16, layout=ts.Layout.swizzled(xor=0b11100))
-    V_s = ts.alloc_shared((BC, D), f16, layout=ts.Layout.swizzled(xor=0b11100))
+    Q_s = tis.alloc_shared((BR, D), f16, layout=tis.Layout.swizzled(xor=0b11100))
+    K_s = tis.alloc_shared((BC, D), f16, layout=tis.Layout.swizzled(xor=0b11100))
+    V_s = tis.alloc_shared((BC, D), f16, layout=tis.Layout.swizzled(xor=0b11100))
 
-    ts.load(Q[bm*BR:(bm+1)*BR, :], Q_s, mode=Sync)
-    ts.barrier()
+    tis.load(Q[bm*BR:(bm+1)*BR, :], Q_s, mode=Sync)
+    tis.barrier()
 
-    pipe = ts.Pipeline(stages=STAGES, buffers={"K": K_s, "V": V_s})
+    pipe = tis.Pipeline(stages=STAGES, buffers={"K": K_s, "V": V_s})
 
     @pipe.produce
     def fetch(j: int, buf):
-        ts.load(K[j*BC:(j+1)*BC, :], buf.K, mode=Async)
-        ts.load(V[j*BC:(j+1)*BC, :], buf.V, mode=Async)
+        tis.load(K[j*BC:(j+1)*BC, :], buf.K, mode=Async)
+        tis.load(V[j*BC:(j+1)*BC, :], buf.V, mode=Async)
 
     @pipe.consume
     def attend(j: int, buf, st: AttnState) -> AttnState:
-        S = ts.dot(Q_s, ts.transpose(buf.K), ts.zeros((BR, BC), f32, Register),
-                   mma=ts.MMA(16, 8, 16), pad=ts.PadPolicy.Error)
+        S = tis.dot(Q_s, tis.transpose(buf.K), tis.zeros((BR, BC), f32, Register),
+                   mma=tis.MMA(16, 8, 16), pad=tis.PadPolicy.Error)
         S = S * scale
-        m_ij  = ts.reduce(S, axis=1, op=Max)
-        m_new = ts.maximum(st.m, m_ij)
-        alpha = ts.exp(st.m - m_new)
-        P     = ts.exp(S - m_new[:, None])
-        l_new = alpha * st.l + ts.reduce(P, axis=1, op=Sum)
-        O_new = alpha[:, None] * st.O_acc + ts.dot(ts.cast(P, f16), buf.V,
-                                                   ts.zeros((BR, D), f32, Register))
+        m_ij  = tis.reduce(S, axis=1, op=Max)
+        m_new = tis.maximum(st.m, m_ij)
+        alpha = tis.exp(st.m - m_new)
+        P     = tis.exp(S - m_new[:, None])
+        l_new = alpha * st.l + tis.reduce(P, axis=1, op=Sum)
+        O_new = alpha[:, None] * st.O_acc + tis.dot(tis.cast(P, f16), buf.V,
+                                                   tis.zeros((BR, D), f32, Register))
         return AttnState(O_acc=O_new, m=m_new, l=l_new)
 
-    st = pipe.run(range(ts.cdiv(seq_len, BC)),
-                  init=AttnState(O_acc=ts.zeros((BR, D), f32, Register),
-                                 m=ts.full((BR,), -inf, f32, Register),
-                                 l=ts.zeros((BR,), f32, Register)))
+    st = pipe.run(range(tis.cdiv(seq_len, BC)),
+                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register),
+                                 m=tis.full((BR,), -inf, f32, Register),
+                                 l=tis.zeros((BR,), f32, Register)))
 
-    ts.store(ts.cast(st.O_acc / st.l[:, None], f16), O[bm*BR:(bm+1)*BR, :])
-    ts.store(ts.log(st.l) + st.m, L[bm*BR:(bm+1)*BR])
+    tis.store(tis.cast(st.O_acc / st.l[:, None], f16), O[bm*BR:(bm+1)*BR, :])
+    tis.store(tis.log(st.l) + st.m, L[bm*BR:(bm+1)*BR])
 ```
 
 相对原方案的修正：
