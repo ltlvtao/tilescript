@@ -18,3 +18,4 @@ TileScript 是面向 AI 辅助优化的跨硬件 Tile 级编程语言：把优�
 ## 稳定基线
 
 - `language/syntax-acceptance-set`（2026-09-24，change `add-language-syntax-acceptance-set`）：M1 前端语法接受集——Python 3.10 载体（`tis.` 前缀、`.tis` 扩展名）、顶层/装饰器/签名/语句/表达式白名单与拒绝清单（`E0101`–`E0107`）、拒绝报告四要素契约。
+- `language/type-system`（2026-09-28，change `add-language-type-system`）：类型系统行为契约——类型表达式结构与 dtype/scope 封闭集合（`E0302`）、三类标量种类与 shape 组件、类型等价（逐组件/符号维度/派生维度结构等价）、3×3 作用域转移矩阵（`E0301`，历史码语义不变）、状态类类型与字段约束（nominal 等价、`E0304`）、表达式结果类型规则（单类型不变量、切片/广播维变换、primitives/执行结构/数值语义显式让渡）、类型不匹配（`E0303`，数据移动原语实参整体豁免）、E03xx 报告契约与段内 tiebreak。
