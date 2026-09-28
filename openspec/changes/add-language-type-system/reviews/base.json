@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "changeId": "add-language-type-system",
+  "baseSha": "0cfc03fb1d4b36198d1e27ae273cbfcfe1708807",
+  "note": "纯规格先行 change：定义 language/type-system 行为契约（类型结构/等价/转移矩阵/状态约束/类型不匹配），无代码交付"
+}
