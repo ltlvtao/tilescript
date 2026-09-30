@@ -173,7 +173,7 @@ shape 维度等价判定：两边同为编译期常量且值相等；或两边�
 
 类型绑定位置——赋值的目标与源、调用的实参与形参、`return` 值与返回注解——两侧类型 MUST 等价，或满足单向兼容（`comptime[int]` 值用于 `int` 位置）。不满足时，编译器 MUST 以 `E0303` 拒绝；报告 MUST 包含行列位置、两侧类型与绑定位置类别，恢复建议按差异组件给出（dtype 不同建议显式 cast 原语、scope 不同建议显式移动原语、shape 不同建议核对维度、种类不同建议核对标量种类）。
 
-本 Requirement 的等价规则适用于赋值、返回绑定与非原语调用的实参绑定（状态类构造调用、执行结构方法与内建调用等）。`tis.*` 原语调用表达式的实参整体不适用等价规则：数据移动原语的实参 scope 组合由「作用域转移矩阵」裁决（`E0301`），全部原语实参的形态与值域约束由该原语在 `primitives/*` 中的参数契约承载（`E04xx`），均 MUST NOT 按本 Requirement 报告 `E0303`。原语的参数契约随各 primitives change 逐个定义，其权威集合以已归档的 `primitives/*` specs 为准。普通赋值语句 MUST NOT 承载跨 scope 数据移动：赋值两侧 scope 不同时按本 Requirement 以 `E0303` 拒绝（类型不等价），跨 scope 移动必须使用显式移动原语。
+本 Requirement 的等价规则适用于赋值、返回绑定与带源码层形参注解的调用的实参绑定（状态类构造调用等）。`tis.*` 原语调用表达式与执行结构调用（执行结构方法 `pipe.run(...)`、内建 `range(...)` 等无源码层形参注解的调用）的实参整体不适用等价规则：数据移动原语的实参 scope 组合由「作用域转移矩阵」裁决（`E0301`），`tis.*` 原语实参的形态与值域约束由该原语在 `primitives/*` 中的参数契约承载（`E04xx`），执行结构调用实参的形态与契约约束由 `execution/*` 的调用契约承载（`E05xx`），均 MUST NOT 按本 Requirement 报告 `E0303`。原语的参数契约随各 primitives change 逐个定义，执行结构调用契约随各 execution change 定义，其权威集合以已归档的 `primitives/*` 与 `execution/*` specs 为准。普通赋值语句 MUST NOT 承载跨 scope 数据移动：赋值两侧 scope 不同时按本 Requirement 以 `E0303` 拒绝（类型不等价），跨 scope 移动必须使用显式移动原语。
 
 #### Scenario: dtype 不匹配的赋值被拒绝
 
