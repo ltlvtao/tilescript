@@ -17,7 +17,7 @@
 
 ### 当前实现
 
-仓库尚无编译器代码。执行结构事实只存在于 `veps/design.md`：§2.5 一段示例（`tis.Pipeline(stages=3, buffers={…})`/`@pipe.produce`/`@pipe.consume`/`pipe.run(range(…), init=…)`）加"半自动"原则与 Z3 承诺；§2.3 warp_group 签名与 E0501 一句话事实；§7 八类用法（Pipeline×1、produce×1、consume×1、run×1、buf 属性×3、range×1、cdiv×1、block_idx×1）零参数级契约。语法层已接受相关形态（`with tis.warp_group(...)`、`@pipe.produce/consume`、`for … in range(...)`）。既有错误码事实：`E0501`（veps，未进 stable）。type-system MODIFIED 后的豁免只覆盖 `tis.*` 原语调用，`pipe.run`/`range` 实参按现行 stable 属 E0303 适用集（"执行结构方法与内建调用的实参绑定"）——与这些调用无源码层形参注解的事实矛盾，形成双解源。
+仓库尚无编译器代码。执行结构事实只存在于 `veps/design.md`：§2.5 一段示例（`tis.Pipeline(stages=3, buffers={…})`/`@pipe.produce`/`@pipe.consume`/`pipe.run(range(…), init=…)`）加"半自动"原则与 Z3 承诺；§2.3 warp_group 签名与 E0501 一句话事实；§7 八类用法（Pipeline×1、produce×1、consume×1、run×1、buf 属性×4、range×1、cdiv×1、block_idx×1）零参数级契约。语法层已接受相关形态（`with tis.warp_group(...)`、`@pipe.produce/consume`、`for … in range(...)`）。既有错误码事实：`E0501`（veps，未进 stable）。type-system MODIFIED 后的豁免只覆盖 `tis.*` 原语调用，`pipe.run`/`range` 实参按现行 stable 属 E0303 适用集（"执行结构方法与内建调用的实参绑定"）——与这些调用无源码层形参注解的事实矛盾，形成双解源。
 
 ### GAP 分析
 

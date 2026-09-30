@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 | 1 | L488 `pipe = tis.Pipeline(stages=STAGES, buffers={"K": K_s, "V": V_s})` | Pipeline 构造 | R1：`STAGES: comptime[int] = 2`（L474 默认值）≥1 ✅；buffers 非空字典字面量、键 `"K"`/`"V"` 为字符串常量且内容形如标识符、互不相同 ✅、值 K_s/V_s 均为 `alloc_shared` 产物 `Tensor[f16, (comptime BC, comptime D), Shared]`（swizzled 为分配物理属性不进类型，见 m1-primitive-usage-mapping #7/8）✅；恰两关键字实参、无位置实参 ✅；位于 kernel 顶层函数体 ✅、每 kernel 至多一个实例（全案例仅此一处）✅；首次绑定 `pipe =` ✅ | ✅ |
 | 2 | L490–493 `@pipe.produce def fetch(j: int, buf):` | produce 嵌套函数 | R2：装饰器接收者 `pipe` 为 Pipeline 值 ✅（R1 封闭集：装饰器接收者）；恰两形参——第一形参 `j: int` 带 `int` 注解 ✅、第二形参 `buf` 无注解 ✅；每实例至多一个 produce（仅一处）✅；体内 L492/493 两条 `tis.load`（合法语句，E0105 白名单 + memory-ops 契约）；`fetch` 名称未被显式调用、未作值使用 ✅（R2 禁止条款不命中） | ✅ |
-| 3 | L495–507 `@pipe.consume def attend(j: int, buf, st: AttnState) -> AttnState:` | consume 嵌套函数 | R2：恰三形参——`j: int` ✅、`buf` 无注解 ✅、`st: AttnState` 状态类注解 ✅；返回注解 `AttnState` 与第三形参**同一类声明** ✅（状态链同 S）；每实例至多一个 consume ✅；体内 `buf.K`/`buf.V` 属性访问（#5/6）、计算原语不限（consumer 侧无限制；produce/consume 区别见 R6——此处非 warp_group 语境，无原语类别限制）；`attend` 未被显式调用、未作值使用 ✅ | ✅ |
+| 3 | L495–507 `@pipe.consume def attend(j: int, buf, st: AttnState) -> AttnState:` | consume 嵌套函数 | R2：恰三形参——`j: int` ✅、`buf` 无注解 ✅、`st: AttnState` 状态类注解 ✅；返回注解 `AttnState` 与第三形参**同一类声明** ✅（状态链同 S）；每实例至多一个 consume ✅；体内 `buf.K`/`buf.V` 属性访问（#5/6）、计算原语不限（Pipeline produce/consume 嵌套函数体内均无原语类别限制——区别于 warp_group producer 角色的 E0501 限制，见 R6；本案例无 warp_group 语境）；`attend` 未被显式调用、未作值使用 ✅ | ✅ |
 | 4 | L509–512 `st = pipe.run(range(tis.cdiv(seq_len, BC)), init=AttnState(…))` | run 调用 | R3：恰两实参——位置 0 为 `range(...)` 内建调用 ✅（#7）、`init=` 为状态类构造值 ✅；init 状态类 `AttnState` 与 consume 第三形参注解同类 ✅；kernel 顶层 ✅、每实例恰一次 ✅、调用前已装饰 produce+consume（L490/L495 先于 L509）✅；接收者 `pipe` 为 Pipeline 值 ✅（R1 封闭集：run 接收者）；结果 `st` 类型 = `AttnState`（L514/515 `st.O_acc`/`st.l`/`st.m` 字段访问由 type-system 状态类规则裁决）✅。**init 两层核对见 §2** | ✅ |
 | 5 | L492 `buf.K`（load dst）、L497 `tis.transpose(buf.K)`（dot 实参） | buf.K 属性 ×2 | R4：`K` 为已注册名 ✅；类型推导 = `buffers["K"]` 值类型 `Tensor[f16, (comptime BC, comptime D), Shared]` ✅；使用位置——L492 属性访问结果作 `tis.load` dst（R4：Async 拷贝写入目标 ✅）、L497 作 `tis.transpose` 实参（属性访问产生的 Tensor 值正常使用 ✅）；`buf` 整对象未逃逸 ✅ | ✅ |
 | 6 | L493 `buf.V`（load dst）、L505 `buf.V`（dot 实参） | buf.V 属性 ×2 | 同 #5（`V` 注册名、类型 `Tensor[f16, (comptime BC, comptime D), Shared]`） | ✅ |
@@ -54,7 +54,8 @@
 |---|---|---|---|
 | 语法段 | E0101–E0107 | `language/syntax-acceptance-set`（已归档） | 与 E05xx 无重叠；E0105 语句白名单（with 仅 `tis.warp_group`、for 仅 range|tile_iter）与 E0103 装饰器白名单（含 pipe.produce/consume）在**形态层**先决，E05xx 在**语义契约层**裁决——互补封闭无双解（round 1 审查维度 C 核验） |
 | 类型段 | E0301–E0304 | `language/type-system`（已归档；E0303 适用集经本 change MODIFIED 二次收敛） | 与 E05xx 无重叠；pipe.run/range 实参移出 E0303 适用集 |
-| 原语契约段 | E0402–E0407 | `primitives/memory-ops`（已归档） | 与 E05xx 无重叠；同位置跨段命中只报最早段（L492 Async load 违规时 E0407 先于 E05xx，R8 tiebreak） |
+| 原语契约段 | E0402–E0403 | 计算原语（MMA/pad）既有占用（段位登记见 memory-ops，语义不变，非该 capability 定义） | 与 E05xx 无重叠 |
+| 原语契约段 | E0404–E0407 | `primitives/memory-ops`（已归档） | 与 E05xx 无重叠；同位置跨段命中只报最早段（L492 Async load 违规时 E0407 先于 E05xx，R8 tiebreak） |
 | 执行结构段 | E0501–E0505 | `execution/pipeline-structure`（本 change） | E0501 正式化（原 veps 事实语义不变）；E0502–E0505 新增；E0506–E0599 保留 |
 
 - 跨段管线 E01xx→E03xx→E04xx→E05xx 与段内 tiebreak E0501→E0502→E0503→E0504→E0505：spec R8 与 design「E05xx 段位与 tiebreak」条目一致 ✅。
