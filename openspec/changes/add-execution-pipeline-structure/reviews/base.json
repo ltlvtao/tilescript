@@ -1,0 +1,1 @@
+{"schemaVersion": 1, "changeId": "add-execution-pipeline-structure", "baseSha": "2aa29d3df95dc88986216c1eab560ddd1550a582", "note": "纯规格先行 change：定义 execution/pipeline-structure 行为契约（Pipeline 构造/produce-consume/run、buffer 命名空间、Async 完成保证、warp_group、索引内建与 E0501–E0505），承接 type-system 与 primitives/memory-ops 的三处显式让渡，无代码交付"}
