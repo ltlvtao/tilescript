@@ -23,8 +23,9 @@
 | 10 | L514 `st.O_acc / st.l[:, None]` | 除法（含广播）×1 | R1：f32 为浮点 dtype ✅（E0604 不命中——`/` 浮点合法）；`(BR, D) / (BR, 1)` 广播 → `Tensor[f32, (BR, D), Register]`；作 `tis.cast` 第一实参（cast 参数契约 E0406 由 memory-ops 承载，实参整体豁免 E0303） | ✅ |
 | 11 | L511 `tis.full((BR,), -inf, f32, Register)` | 具名常量绑定 ×1 | R2/R4：`-inf` 为具名常量 `inf` 经一元负（预置名称，名称引用类别语法合法）；绑定位置为 `tis.full` 的 value——R4 位置①原语 dtype 标量参数位 ✅；`f32` 属 IEEE 754 标准精度 ✅（M4 裁决：f8e4m3 才拒绝）；绑定值为 f32 负无穷 ✅（E0606 不命中）；value 标量形态由 memory-ops E0406 先行裁决（已裁接受） | ✅ |
 | 12 | L509 `tis.cdiv(seq_len, BC)` | cdiv 折叠边界 ×1 | R5：`seq_len: int` 运行期、`BC: comptime[int]`——非全 comptime **不折叠**，结果为运行期 `int`（种类推导由 execution 承载）✅；形态契约 E0505 已裁（BC≠0） | ✅ |
+| 13 | L515 `tis.log(st.l) + st.m` | Tensor-Tensor 同 shape ×1（代码审查 round 1 F2 补入——原仅在 §2 #20 推导，未入逐项清单） | R1：log 结果（计算原语域前提类型，§7 事实下 f32 (BR,)）+ `st.m`（f32 (BR,)）——dtype 同 ✅、scope 同（Register）✅、shape 同 ✅ → `Tensor[f32, (BR,), Register]`；作 `tis.store` 一维 src（长度相容由 memory-ops E0405 承载） | ✅ |
 
-六类充分性标准覆盖核对：int 索引算术（#1/2，10 个表达式）、Tensor-标量乘（#3）、Tensor-Tensor 同 shape 算术（#4/6/7/9）、逐维广播算术含除法（#5/8/10）、`-inf` 常量绑定（#11）、`cdiv` 折叠边界（#12）——**全部覆盖，全部通过，零拒绝规则命中（E0601–E0606 无一触发）**。§7 无比较/逻辑/if 用法（R3 零事实核对：案例已去除 `if warp_size > 0` 类分支）、无 float 字面量、无 int 常量算术位/裸绑定用法——封闭条款零误命中。
+六类充分性标准覆盖核对：int 索引算术（#1/2——乘法表达式 10 个：`bm*BR`×3、`(bm+1)*BR`×3、`j*BC`×2、`(j+1)*BC`×2；其内层加法子表达式 `(bm+1)`×3、`(j+1)`×2 共 5 个另计并同样经 R1 int 家族推导核对，见 #1/2 推导列）、Tensor-标量乘（#3）、Tensor-Tensor 同 shape 算术（#4/6/7/9/13）、逐维广播算术含除法（#5/8/10）、`-inf` 常量绑定（#11）、`cdiv` 折叠边界（#12）——**全部覆盖，全部通过，零拒绝规则命中（E0601–E0606 无一触发）**。§7 无比较/逻辑/if 用法（R3 零事实核对：案例已去除 `if warp_size > 0` 类分支）、无 float 字面量、无 int 常量算术位/裸绑定用法——封闭条款零误命中。
 
 ## 2. 六处"形态级核对"标注的升级闭合（此前两个映射文档的遗留）
 
@@ -62,4 +63,6 @@
 | 数值语义段 | E0601–E0606 | `numerics/value-semantics`（本 change） | E06xx 段此前空白（grep 核实零命中）；E0607–E0699 保留 |
 
 - 跨段管线五段 E01xx→E03xx→E04xx→E05xx→E06xx 与段内 tiebreak E0601→E0602→E0603→E0604→E0605→E0606：spec R7 与 design「E06xx 段位与 tiebreak」条目一致 ✅；既有 specs 的三段/四段表述为前缀列举、五段世界仍为真（design minor 9 裁决）✅。
-- §7 全部数值用法（§1 十二项）经逐层核对零命中任何 E06xx 拒绝——合法路径全部覆盖 ✅。
+- §7 全部数值用法（§1 十三项——代码审查 round 1 F2 补入原漏列的 L515 加法一项后）经逐层核对零命中任何 E06xx 拒绝——合法路径全部覆盖 ✅。
+
+**Scenario 计数勘误（代码审查 round 1 F1）**：本 change spec 实际 **39 个 Scenario**（R1=10/R2=5/R3=4/R4=7/R5=3/R6=6/R7=4，grep `^#### Scenario` 复核）。实施 commit `7a4b355` 的 message 与 h1.jsonl summary 所记「34 Scenario」为起草时计数未随设计审查 round 1 五项 major 修复（跨 scope、`S*2` 拒绝、inf 裸绑、f8e4m3 拒、折叠适用域——各新增 Scenario 共 5 个）同步所致。按 execution change F4 先例：历史 commit message 与 h1.jsonl 凭证性保留不改写，由修复 commit 登记正确计数（修正链留痕）。
