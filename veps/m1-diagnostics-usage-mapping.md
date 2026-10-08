@@ -25,8 +25,8 @@
 | `memory[].bank_conflict.read_way` / `.write_way` / `.worst_access_line` | DR5（对象或 `"unknown"`；条目限 alloc_shared 产物——round 1 m1 修复） | ✅ |
 | `async[].pipeline` / `.stages` | DR6 汇总条目 | ✅ |
 | `async[].estimated_gap_cycles` | DR6（整数，estimated，前缀） | ✅ |
-| `async[].wait_coverage` | **规范化为 `estimated_wait_coverage`**（DR6；同为静态估算，与 gap 一致补前缀——D3 裁决，§3.1 示例的唯一字段名修正，见 §5 勘误） | ✅ |
-| `async[].note` | DR6（确定性文字；DR3 旁路封堵：不得呈现 estimated_ 字段未承载的量化估算） | ✅ |
+| `async[].wait_coverage` | **规范化为 `estimated_wait_coverage`**（DR6；同为静态估算，与 gap 一致补前缀——D3 裁决，§3.1 示例的唯一字段名修正，见 §6 勘误） | ✅ |
+| `async[].note` | DR6（确定性文字；DR3 旁路封堵：不得呈现 estimated_ 字段未承载的量化估算）。值级判定（代码审查 round 1 m2 补）：§3.1 示例值 "wait_group at line 71 blocks 9% of steady-state iterations" 中 9% 与 `estimated_wait_coverage: 0.91` 互补——属「MAY 对已承载值作确定性文字说明」的合法路径（非未承载新估算）；若示例 note 出现任何 estimated_ 字段未承载的百分比/周期数则违规 | ✅ |
 | `async[]` 展开条目（L211 `origin`） | DR6 展开操作条目：`op`（async_copy/wait 封闭二值）+ `origin` 四字段（pipeline/stage/iteration_class 三值/src_line） | ✅ |
 | `compute[].op` / `.src_line` / `.instruction_count` | DR7 通用三字段（六原语名封闭集） | ✅ |
 | `compute[].mma_shape` / `.tensor_core` / `.pad_policy` | DR7 dot 专属必带（mma_shape 承接 L153「Auto 选择出现在诊断 JSON」） | ✅ |
