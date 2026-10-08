@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "changeId": "add-hal-capability-descriptions", "baseSha": "a5c9842f56573259b6519fa5a26eae74bb9cac98", "note": "HAL 域首个 capability（hal/capability-descriptions）：能力描述结构 v1 字段冻结、标识符登记表、顺序即优先序语义、两个 HAL 支持面拒绝补洞（E0506 新增经 execution 段位句登记性 MODIFIED 起用；reduce 显式 scope 支持面经 compute-ops「reduce 的归约契约」行为性 MODIFIED 扩 E0408 值域）；ADDED 为主 + 两条 MODIFIED" }
