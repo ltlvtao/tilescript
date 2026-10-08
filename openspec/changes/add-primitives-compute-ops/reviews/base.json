@@ -1,1 +1,1 @@
-{ "schemaVersion": 1, "changeId": "add-primitives-compute-ops", "baseSha": "32ac7f7385554fd55c068d568dca5d45ec2dea9e", "note": "计算原语域 change：dot/reduce/maximum/exp/log/transpose 参数与结果契约，E0402/E0403 既有占用正式化，E0408 起新增；纯 ADDED" }
+{ "schemaVersion": 1, "changeId": "add-primitives-compute-ops", "baseSha": "32ac7f7385554fd55c068d568dca5d45ec2dea9e", "note": "计算原语域 change：dot/reduce/maximum/exp/log/transpose 参数与结果契约，E0402/E0403 既有占用正式化，E0408 起新增；ADDED 为主 + 一条登记性 MODIFIED（memory-ops 段位保留区间联动，设计审查 round 1 M2 后同步；baseSha 为起草时 HEAD 不变）" }

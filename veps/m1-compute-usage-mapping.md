@@ -37,6 +37,7 @@
 | §2 #17 `tis.cast(P, f16)`——P 依赖 exp 返回类型（"仅 exp 契约"残留） | exp 返回同 dtype/shape/scope | #6：P = exp 结果 f32 (64,64) Register——**残留兑现，该路径零依赖** |
 | §2 #18 完整闭合（无前提） | — | 维持 ✓ |
 | §2 #20 store src——log 返回类型（"仅 log 契约"残留） | log 返回同 dtype/shape/scope | #9：f32 (64,) Register——**残留兑现，该路径零依赖** |
+| §1 #13 `tis.log(st.l) + st.m`——log 结果为算术左操作数（前提标注，代码审查 round 1 m1 补列；与上条 #20 同源） | log 返回同 dtype/shape/scope | #9：f32 (64,) Register——同上，逐处落实清单闭合 |
 | §2 O_acc 行——dot 结果（前提类型） | #8 同 | ✓ |
 | §2 m 行——"部分闭合（如实）：maximum 返回类型归计算原语域（形态级保留）" | maximum 返回同 dtype/shape/scope | #4：`m_new` f32 (64,) Register 与 `AttnState.m` 字段声明 `Tensor[f32, (BR,), Register]` 等价——E0303 路径现可完整判定，**形态级残留最终闭合** |
 | §2 l 行——reduce 结果（前提类型） | #7 同 | ✓ |
