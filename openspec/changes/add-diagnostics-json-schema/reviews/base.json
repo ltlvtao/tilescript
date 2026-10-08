@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "changeId": "add-diagnostics-json-schema", "baseSha": "c58b881c6815a0fee29b7c4d2de9ee640bcec3ca", "note": "诊断域首个 capability（diagnostics/json-schema）：诊断 JSON Schema v1 结构、字段精度等级、确定性边界与六段字段集冻结；纯 ADDED（四处让渡句为域级 diagnostics/* 指向，落地后依然成立，无 MODIFIED）；不新增错误码（诊断 JSON 为编译通过输出形态，与 E01xx–E06xx 拒绝清单形态分离）" }
