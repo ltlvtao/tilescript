@@ -10,7 +10,7 @@ import ast
 
 from . import expressions
 from .report import Rejection
-from .top_level import _is_entry_function
+from .top_level import iter_entry_functions
 
 _ORDER = 5
 
@@ -60,9 +60,8 @@ _REJECTED = {
 
 def check(tree: ast.Module) -> "list[Rejection]":
     rejections: list[Rejection] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and _is_entry_function(node):
-            rejections.extend(_check_body(node.body))
+    for node in iter_entry_functions(tree):
+        rejections.extend(_check_body(node.body))
     return rejections
 
 

@@ -46,6 +46,18 @@ def check(tree: ast.Module) -> "list[Rejection]":
     return rejections
 
 
+def iter_entry_functions(tree: ast.Module):
+    """设备代码检查根：仅模块顶层的入口函数。
+
+    嵌套的入口装饰函数已被 E0103（目标类别不匹配）与 E0105（function-definition
+    短路）拒绝，其子树不再独立检查（design D3——被拒构造子树不深入）；
+    statements/signature/expressions 的检查根统一取本迭代器。
+    """
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and _is_entry_function(node):
+            yield node
+
+
 def _has_tis_decorator(node: ast.AST, name: str) -> bool:
     """`@tis.<name>` 形态装饰器（Attribute：value 为 Name 'tis'、attr 为 name）。"""
     return any(

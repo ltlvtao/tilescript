@@ -9,7 +9,7 @@
 import ast
 
 from .report import Rejection
-from .top_level import _is_entry_function
+from .top_level import iter_entry_functions
 
 _ORDER = 4
 
@@ -21,9 +21,7 @@ _FORMS = "Pointer[...]、Tensor[...]、dtype 名（f16/bf16/f32/f8e4m3/i8/i32）
 
 def check(tree: ast.Module) -> "list[Rejection]":
     rejections: list[Rejection] = []
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.FunctionDef) and _is_entry_function(node)):
-            continue
+    for node in iter_entry_functions(tree):
         for arg, default in _all_args(node.args):
             rejections.extend(_check_arg(arg, default))
     return rejections

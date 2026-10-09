@@ -8,7 +8,7 @@ Scenario 映射：
 - 白名单语句含被拒表达式只报表达式错误（L118）
 """
 
-from tilescript.frontend import carrier, statements
+from tilescript.frontend import carrier, check_module, statements
 
 
 def _check(body: str, decorator: str = "@tis.kernel", signature: str = "def k(n: int):"):
@@ -134,3 +134,25 @@ class TestE0105SubexpressionRule:
                      "            y = [x for x in row]\n")
         assert len(out) == 1 and out[0].code == "E0106"
         assert out[0].category == "list-comprehension"
+
+    def test_nested_entry_function_subtree_not_independently_checked(self):
+        """代码审查 F3：嵌套 @tis.kernel 已按 E0103+E0105 拒绝并短路——
+        其参数（E0104）与体内语句不再独立检查（D3「被拒构造子树不再深入」）。
+        走全管线（E0103/E0104 分属 decorators/signature 检查器）。"""
+        source = (
+            "import tis\n"
+            "\n"
+            "@tis.kernel\n"
+            "def k(n: int):\n"
+            "    @tis.kernel\n"
+            "    def inner(a, b):\n"
+            "        while a > 0:\n"
+            "            a = a - 1\n"
+        )
+        report = check_module(source)
+        codes = [r.code for r in report]
+        assert "E0103" in codes  # 入口装饰器用于嵌套函数（装饰器识别辖全模块）
+        assert "E0105" in codes  # 嵌套函数定义本身（function-definition）
+        assert "E0104" not in codes  # inner 的无注解参数不漏出
+        whiles = [r for r in report if r.category == "while-loop"]
+        assert whiles == []  # 被拒子树的 while 不深入

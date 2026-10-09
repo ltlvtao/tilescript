@@ -13,7 +13,7 @@
 import ast
 
 from .report import Rejection
-from .top_level import _is_entry_function
+from .top_level import iter_entry_functions
 
 _ORDER = 6
 
@@ -44,7 +44,7 @@ _NODE_CATEGORY = {
 }
 
 _OP_SYMBOL = {
-    ast.FloorDiv: "//", ast.Mod: "%", ast.Pow: "**",
+    ast.FloorDiv: "//", ast.Mod: "%", ast.Pow: "**", ast.MatMult: "@",
     ast.LShift: "<<", ast.RShift: ">>",
     ast.BitAnd: "&", ast.BitOr: "|", ast.BitXor: "^",
     ast.Invert: "~", ast.UAdd: "+",
@@ -53,11 +53,10 @@ _OP_SYMBOL = {
 
 
 def check_module(tree: ast.Module) -> "list[Rejection]":
-    """设备代码（入口函数体，词法含嵌套）内全部语句的子表达式检查。"""
+    """设备代码（顶层入口函数体，词法含嵌套）内全部语句的子表达式检查。"""
     rejections: list[Rejection] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and _is_entry_function(node):
-            rejections.extend(_check_stmts(node.body))
+    for node in iter_entry_functions(tree):
+        rejections.extend(_check_stmts(node.body))
     return rejections
 
 
@@ -152,11 +151,17 @@ def _visit(node: ast.expr, ctx: str, out: "list[Rejection]") -> None:
             _visit(value, "kwarg-value", out)
         return
     if isinstance(node, ast.Constant):
-        if isinstance(node.value, str) or isinstance(node.value, bytes):
-            if ctx != "kwarg-value":
-                out.append(_rej(node, "string-literal-position",
-                                "字符串常量仅接受在调用关键字实参值位置。"))
-        return  # int/float/bool/None 无位置限制
+        if isinstance(node.value, bytes):
+            # bytes 不在 R6 接受集（数值常量/布尔/None/字符串常量之外）——
+            # 任何位置（含关键字实参值）拒绝。
+            out.append(_rej(node, "bytes-literal",
+                            "bytes 字面量不在设备代码表达式接受集。"))
+            return
+        if isinstance(node.value, str) and ctx != "kwarg-value":
+            out.append(_rej(node, "string-literal-position",
+                            "字符串常量仅接受在调用关键字实参值位置。"))
+            return
+        return  # int/float/bool/None/str(kwarg 值) 无进一步限制
     if isinstance(node, ast.Call):
         _visit(node.func, "general", out)
         for arg in node.args:

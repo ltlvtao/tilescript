@@ -137,3 +137,17 @@ class TestE0106Rejections:
         """星号解包实参 → E0106。"""
         out = _check("tis.foo(*args)")
         assert out[0].category == "starred-expression"
+
+    def test_matmul_operator_symbol_has_fallback(self):
+        """代码审查 F1：`a @ b` 拒绝建议中的运算符符号不得为 None。"""
+        out = _check("a @ b")
+        assert out[0].category == "disallowed-operator"
+        assert "@" in out[0].suggestion
+        assert "None" not in out[0].suggestion
+
+    def test_bytes_literal_rejected_everywhere(self):
+        """代码审查 F2：bytes 不在 R6 接受集——任何位置（含 kwarg 值）拒绝。"""
+        out = _check("b\"x\"", "x = {}")
+        assert out[0].code == "E0106" and out[0].category == "bytes-literal"
+        out = _check("tis.foo(tag=b\"x\")")
+        assert out[0].code == "E0106" and out[0].category == "bytes-literal"

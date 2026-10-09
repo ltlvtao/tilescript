@@ -36,7 +36,7 @@
 
 - [x] 6.1 集成样例：veps §7 FlashAttention 源码（Scenario L100 实例化；须去除 `module flash_attention:` 文档伪代码行——该行按 `E0101` 拒绝，veps §7 的源码以源文件本身为模块）语法段零拒绝 + 拒绝注入样例（while/列表推导双拒绝排序）
 - [x] 6.2 `python3 -m pytest -q` 全量通过；`npx openspec validate --all --strict` 通过；`.husky/pre-push` 实际触发验证
-- [ ] 6.3 主智能体读全部 diff（实施结果第一读者）→ commit 候选代码
+- [x] 6.3 主智能体读全部 diff（实施结果第一读者）→ commit 候选代码
 
 ## 7. 流程闭环
 
