@@ -1,0 +1,14 @@
+[project]
+name = "tilescript"
+version = "0.1.0"
+description = "跨硬件 Tile 级编程语言：显式优化控制、源码级结构化诊断、确定性编译"
+requires-python = ">=3.10"
+# 零三方运行时依赖：运行面仅标准库（ast/argparse/json/sys），确定性输入面最小化（design D1）。
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

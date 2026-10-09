@@ -27,4 +27,4 @@ TileScript 是面向 AI 辅助优化的跨硬件 Tile 级编程语言：显式�
 - 新增或修改可观察行为时先写表达目标行为的测试（TDD）；缺陷修复先复现失败。
 - 行为测试断言公共可观察结果（编译输出、诊断 JSON、错误码、公共 API），不断言私有实现细节。
 - 改动须追溯到人工请求、OpenSpec change、架构约束或直接强迫的联动；不得顺改无关代码。
-- 当前尚无代码与质量脚本（build/test/lint）；引入后把对应检查挂入 `.husky/` 门禁并更新本文件。
+- 质量脚本：测试 `python3 -m pytest`（项目 venv：`.venv/bin/python -m pytest`，依赖见 `pyproject.toml` dev 组）已挂入 `.husky/pre-push`（openspec strict 之后执行，pytest 缺失即阻断并提示安装）；lint/build 尚未引入，引入后同样挂入门禁并更新本文件。

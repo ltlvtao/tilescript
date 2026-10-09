@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "changeId": "add-m1-syntax-frontend", "baseSha": "70ad1a6dbe49b1fc0be9ce80125c11f59e2abf49", "note": "M1 前端首个实现 change：仓库首次引入生产代码——Python 3.10+ 零三方依赖前端（工程骨架 + pytest 门禁）与 language/syntax-acceptance-set 全量实现（E0101–E0107、四要素、收集/排序/tiebreak/确定性）；ADDED toolchain/cli 小规格闭合工具链输出面豁口（编译入口、拒绝清单 JSON 序列化、诚实 incomplete 退出）；既有 8 个 stable specs 为行为契约来源，语言行为零新增零修改" }

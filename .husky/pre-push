@@ -14,3 +14,11 @@ while read -r local_ref local_sha pushed_ref pushed_sha; do
   fi
   break
 done
+
+# pytest 门禁：项目 venv 优先，其次系统 python3；pytest 缺失即阻断并提示安装（诚实优先）。
+if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
+if ! "$PY" -c "import pytest" >/dev/null 2>&1; then
+  echo "pre-push: pytest 不可用（$PY）。请安装开发依赖：python3 -m venv .venv && .venv/bin/python -m pip install pytest"
+  exit 1
+fi
+"$PY" -m pytest -q || exit 1
