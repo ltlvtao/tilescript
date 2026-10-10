@@ -19,11 +19,13 @@ def registered_targets_line() -> str:
 
 @dataclass(frozen=True)
 class Capability:
-    """能力描述（本 change 消费面：mma_shapes / reduce_scopes；其余字段随消费段加载）。"""
+    """能力描述（消费面：mma_shapes / reduce_scopes / persistent_kernel；
+    其余字段随消费段加载）。"""
 
     name: str
     mma_shapes: tuple          # 三元组元组，登记顺序即 Auto 优先序
     reduce_scopes: tuple       # 小写字面 "warp"/"block"，登记顺序即 Auto 优先序
+    persistent_kernel: bool    # 入口 HAL 支持面（E0506 判定数据源）
 
 
 _CAPABILITIES = {
@@ -31,11 +33,13 @@ _CAPABILITIES = {
         name="nvidia_h200",
         mma_shapes=((16, 8, 16), (16, 8, 32)),
         reduce_scopes=("warp", "block"),
+        persistent_kernel=True,
     ),
     "ascend_910b": Capability(
         name="ascend_910b",
         mma_shapes=((16, 16, 16),),
         reduce_scopes=("block",),
+        persistent_kernel=False,
     ),
 }
 

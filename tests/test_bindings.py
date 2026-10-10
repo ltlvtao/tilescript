@@ -165,7 +165,11 @@ class TestReturnAndCalls:
     `@pipe.*` 真实形态走公共管线（模块级 @tis.* 形态被语法段拒绝）。"""
 
     def _pipeline(self, body_inner: str, call_stmts: str, kernel_params="n: int"):
-        from tilescript import pipeline
+        """显式调用载体走类型段直测（第四段接入后显式调用归 E0502 执行段
+        承载，类型段单面直测保持焦点）。"""
+        import ast as _ast
+
+        from tilescript import typecheck
         source = (
             "import tis\n"
             "\n"
@@ -178,7 +182,7 @@ class TestReturnAndCalls:
             f"{call_stmts}"
             "    return\n"
         )
-        return pipeline.compile_stages(source, target="nvidia_h200")
+        return typecheck.check_module(_ast.parse(source))
 
     def test_return_checked_against_annotation(self):
         """return × 返回注解（嵌套 consume 形态）。"""
@@ -263,8 +267,13 @@ class TestReturnAndCalls:
         assert rs[0].category == "call-arg" and "comptime" in rs[0].suggestion
 
     def test_unannotated_call_and_position_ctor_not_checked(self):
-        """负例：无注解形参位不查；状态构造位置实参不查（proposal 非目标）。"""
-        from tilescript import pipeline
+        """负例：无注解形参位不查；状态构造位置实参不查（proposal 非目标）。
+
+        类型段直测（第四段接入后 Pipeline 缺参与显式调用形态归 E0502
+        执行段承载，类型段单面零拒绝以直测承载）。"""
+        import ast as _ast
+
+        from tilescript import typecheck
         source = (
             "import tis\n"
             "\n"
@@ -284,14 +293,42 @@ class TestReturnAndCalls:
             "    st = S(a)\n"       # 构造位置实参：不查
             "    return\n"
         )
-        assert pipeline.compile_stages(source, target="nvidia_h200") == []
+        assert typecheck.check_module(_ast.parse(source)) == []
 
-    def test_explicit_call_legality_not_reported(self):
-        """负例：produce/consume 显式调用合法性归 E0502——M1 本段不报调用本身。"""
+    def test_explicit_call_legality_reported_as_e0502(self):
+        """段间分工：类型段不报显式调用本身；四段管线下以 E0502 承载。"""
         rs = self._pipeline(
             "    @pipe.produce\n"
             "    def inner(j: int):\n"
             "        ...\n",
             "    inner(5)\n",
         )
-        assert rs == []
+        assert rs == []   # 类型段不报（M1 本段不查调用合法性）
+        from tilescript import pipeline
+        source = (
+            "import tis\n"
+            "\n"
+            "@tis.state\n"
+            "class S:\n"
+            "    m: Tensor[f32, (64,), Register]\n"
+            "\n"
+            "@tis.kernel\n"
+            "def k(n: int, STAGES: comptime[int] = 2):\n"
+            "    K_s = tis.alloc_shared((64, 64), f16)\n"
+            "    pipe = tis.Pipeline(stages=STAGES, buffers={\"K\": K_s})\n"
+            "\n"
+            "    @pipe.produce\n"
+            "    def inner(j: int, buf):\n"
+            "        ...\n"
+            "\n"
+            "    @pipe.consume\n"
+            "    def epilogue(j: int, buf, st: S) -> S:\n"
+            "        return st\n"
+            "\n"
+            "    inner(5)\n"
+            "    st = pipe.run(range(n), init=S(m=tis.zeros((64,), f32, Register)))\n"
+            "    return\n"
+        )
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0502"]
+        assert rs[0].category == "nested-fn-value"

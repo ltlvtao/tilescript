@@ -137,7 +137,148 @@ class TestPrimitiveStageWiring:
         # 原语段（E0404，同 _PRIMITIVE_BROKEN）
         # 类型段（E0303，同 _TYPED_BROKEN）——上面两测已分别固定。
 
-    def test_implemented_stages_three(self):
-        """toolchain/cli R3 段清单唯一来源：三段登记。"""
+    def test_implemented_stages_four(self):
+        """toolchain/cli R3 段清单唯一来源：四段登记（9.2 第四段接入）。"""
         assert pipeline.IMPLEMENTED_STAGES == (
-            "syntax", "type-system", "primitive-contract")
+            "syntax", "type-system", "primitive-contract",
+            "execution-structure")
+
+
+# ---- 9.2 第四段接入（execution-structure）：接入 + 短路 + 报告契约（delta R 5S）----
+
+_EXEC_BASE = (
+    "import tis\n"
+    "\n"
+    "@tis.state\n"
+    "class AttnState:\n"
+    "    O_acc: Tensor[f32, (BR, D), Register]\n"
+    "\n"
+    "@tis.kernel\n"
+    "def flash(K_ptr: Pointer[f16, Global], seq_len: int,\n"
+    "          D: comptime[int] = 64, BR: comptime[int] = 64,\n"
+    "          STAGES: comptime[int] = 2):\n"
+    "    K_s = tis.alloc_shared((BR, D), f16)\n"
+    "    pipe = tis.Pipeline(stages=STAGES, buffers={\"K\": K_s})\n"
+    "\n"
+    "    @pipe.produce\n"
+    "    def fetch(j: int, buf):\n"
+    "        tis.load(K_s, buf.K, mode=Async)\n"
+    "\n"
+    "    @pipe.consume\n"
+    "    def attend(j: int, buf, st: AttnState) -> AttnState:\n"
+    "        return st\n"
+    "\n"
+    "    st = pipe.run(range(seq_len),\n"
+    "                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))\n"
+    "    return\n"
+)
+
+_PK_ENTRY = (
+    "import tis\n"
+    "\n"
+    "@tis.persistent_kernel\n"
+    "def pk(K_ptr: Pointer[f16, Global], D: comptime[int] = 64):\n"
+    "    K_s = tis.alloc_shared((D, 16), f16)\n"
+    "    return\n"
+)
+
+
+class TestExecutionStageIntegration:
+    """第四段接入面：段清单、合法源零拒绝、E0506 管线上报。"""
+
+    def test_clean_flash_zero_rejections_four_stages(self):
+        """合法 FLASH 全链四段零拒绝。"""
+        assert pipeline.compile_stages(_EXEC_BASE, target="nvidia_h200") == []
+
+    def test_e0506_reaches_pipeline_report(self):
+        """E0506 经管线上报：ascend 拒 / h200 零拒绝。"""
+        rs = pipeline.compile_stages(_PK_ENTRY, target="ascend_910b")
+        assert [r.code for r in rs] == ["E0506"]
+        assert rs[0].stage == "execution-structure"
+        assert pipeline.compile_stages(_PK_ENTRY, target="nvidia_h200") == []
+
+
+class TestExecutionShortCircuit:
+    """delta 段间短路句：前序段任一非空即执行段 MUST NOT 执行。"""
+
+    _PRIM_BROKEN = (
+        "import tis\n"
+        "\n"
+        "@tis.kernel\n"
+        "def k(gl: Tensor[f16, (16, 16), Global], sh: Tensor[f16, (16, 16), Shared],\n"
+        "      STAGES: comptime[int] = 2):\n"
+        "    tis.load(gl, sh, mode=Fast)\n"   # E0406（语言层实参）
+        "    pipe = tis.Pipeline(stages=STAGES, buffers={\"K\": sh})\n"
+        "    pipe2 = tis.Pipeline(stages=STAGES, buffers={\"K\": sh})\n"  # 本应 E0502
+        "    return\n"
+    )
+
+    _TYPED_BROKEN = (
+        "import tis\n"
+        "\n"
+        "@tis.kernel\n"
+        "def k(gl: Tensor[f16, (16,), Global], sh: Tensor[f16, (16,), Shared],\n"
+        "      b: Tensor[f32, (16,), Register], STAGES: comptime[int] = 2):\n"
+        "    b = gl\n"   # E0303
+        "    pipe = tis.Pipeline(stages=STAGES, buffers={\"K\": sh})\n"
+        "    pipe2 = tis.Pipeline(stages=STAGES, buffers={\"K\": sh})\n"  # 本应 E0502
+        "    return\n"
+    )
+
+    def test_primitive_rejection_suppresses_execution_stage(self):
+        """delta Scenario：原语段 E0406 在 → 第 8 行本应 E0502 不出现。"""
+        rs = pipeline.compile_stages(self._PRIM_BROKEN, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0406"]
+        assert not any(r.code.startswith("E05") for r in rs)
+
+    def test_type_rejection_suppresses_execution_stage(self):
+        """类型段非空同样短路（E0303 在 → 潜在 E0502 不出现）。"""
+        rs = pipeline.compile_stages(self._TYPED_BROKEN, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0303"]
+        assert not any(r.code.startswith(("E04", "E05")) for r in rs)
+
+    def test_same_position_primitive_wins(self):
+        """delta Scenario：同 load 调用 E0407（顶层 Async）与 E0502（pipe
+        逃逸）双命中，只报管线更早的原语段一条（短路承载）。"""
+        source = _EXEC_BASE.replace(
+            "    st = pipe.run(range(seq_len),\n"
+            "                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))\n",
+            "    tis.load(pipe, K_s, mode=Async)\n"
+            "    st = pipe.run(range(seq_len),\n"
+            "                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))\n")
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0407"]
+        assert not any(r.code.startswith("E05") for r in rs)
+
+
+class TestExecutionReportContract:
+    """delta R 5S 管线面：收集排序 / 同码合并 / 重复一致。"""
+
+    _TWO_HITS = _EXEC_BASE.replace("buf.K, mode=Async", "buf.Q, mode=Async").replace(
+        "    st = pipe.run(range(seq_len),",
+        "    y = pipe\n"
+        "    st = pipe.run(range(seq_len),")
+
+    def test_multiple_execution_rejections_collected_and_sorted(self):
+        """delta Scenario 1：E0503（buf.Q 行）与 E0502（y = pipe 行）恰两条、
+        位置升序。"""
+        rs = pipeline.compile_stages(self._TWO_HITS, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0503", "E0502"]
+        assert rs[0].line < rs[1].line
+        assert all(r.stage == "execution-structure" for r in rs)
+
+    def test_same_call_single_code_merged(self):
+        """delta Scenario 4：pipe.run(K_s) 同调用多实参违规合并一条列全部。"""
+        source = _EXEC_BASE.replace(
+            "    st = pipe.run(range(seq_len),\n"
+            "                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))\n",
+            "    st = pipe.run(K_s)\n")
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
+        assert len(rs) == 1 and rs[0].code == "E0502"
+        assert "range" in rs[0].suggestion and "init" in rs[0].suggestion
+
+    def test_repeat_compilation_identical(self):
+        """delta Scenario 5：同一非法模块连续编译两次逐条一致。"""
+        a = pipeline.compile_stages(self._TWO_HITS, target="nvidia_h200")
+        b = pipeline.compile_stages(self._TWO_HITS, target="nvidia_h200")
+        assert [r.to_dict() for r in a] == [r.to_dict() for r in b]

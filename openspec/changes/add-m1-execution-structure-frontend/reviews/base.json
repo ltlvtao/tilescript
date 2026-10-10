@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "changeId": "add-m1-execution-structure-frontend", "baseSha": "1ffa131", "note": "M1 第四检查段：execution E0501-E0506 实现面 + hal persistent_kernel 加载 + pipeline 第四段 + cli 快照联动" }

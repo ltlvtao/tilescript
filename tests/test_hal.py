@@ -32,6 +32,12 @@ class TestRegisteredValues:
         else:
             raise AssertionError("未登记目标应拒绝")
 
+    def test_persistent_kernel_registered_values(self):
+        """persistent_kernel 登记值（v1 字段集：h200=true / ascend=false）——
+        E0506 入口 HAL 支持面判定的唯一数据源（execution change tasks 1.1）。"""
+        assert hal.capability("nvidia_h200").persistent_kernel is True
+        assert hal.capability("ascend_910b").persistent_kernel is False
+
 
 class TestAutoSelection:
     def test_auto_mma_is_first_item(self):

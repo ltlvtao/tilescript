@@ -114,10 +114,11 @@ class TestInjection:
         assert payload["rejections"][1]["category"] == "list-comprehension"
 
 
-class TestFlashAttentionThreeStages:
-    def test_three_stages_zero_rejections(self):
-        """三段（syntax/type/primitive）零拒绝：load 切片折叠支 (bm+1)*BR-
-        bm*BR → BR 贯通、dot 的 buf.* 操作数 UNKNOWN 让渡、算术/pipe 让渡。"""
+class TestFlashAttentionFourStages:
+    def test_four_stages_zero_rejections(self):
+        """四段零拒绝（10.1）：前三段既有面 + 执行结构段全套合法——Pipeline
+        构造/produce/consume/run、cdiv/range/block_idx、buf.K/V 注册键、
+        st.*/pipe.run/算术让渡链维持。"""
         assert pipeline.compile_stages(FLASH_ATTENTION, target="nvidia_h200") == []
 
     def test_dot_known_face_comptime_dims(self):
@@ -139,8 +140,8 @@ class TestFlashAttentionThreeStages:
         )
         assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
-    def test_cli_end_to_end_incomplete_three_stages(self, tmp_path, capsys):
-        """CLI 端到端：exit 0 + incomplete 三段清单（原语段接入后）。"""
+    def test_cli_end_to_end_incomplete_four_stages(self, tmp_path, capsys):
+        """CLI 端到端：exit 0 + incomplete 四段清单（执行结构段接入后）。"""
         src = tmp_path / "flash.tis"
         src.write_text(FLASH_ATTENTION, encoding="utf-8")
         capsys.readouterr()
@@ -149,9 +150,9 @@ class TestFlashAttentionThreeStages:
         assert code == 0
         assert payload["status"] == "incomplete"
         assert payload["implemented_stages"] == [
-            "syntax", "type-system", "primitive-contract"]
-        assert set(payload["pending_stages"]) == {
-            "execution-structure", "numerics"}
+            "syntax", "type-system", "primitive-contract",
+            "execution-structure"]
+        assert set(payload["pending_stages"]) == {"numerics"}
 
     def test_nested_consume_return_binding_checked(self):
         """嵌套 consume 体在检查面内：return 值类型×返回注解可违规。"""
@@ -224,3 +225,48 @@ class TestCrossTargetConsistency:
         assert [r.code for r in ascend] == ["E0406", "E0408"]
         assert ascend[1].category == "scope-unsupported"
         assert "Block" in ascend[1].suggestion  # 目标支持清单
+
+
+class TestCrossTargetE0506:
+    """10.1：E0506 注入面两目标分化 + E05xx 语言层跨目标一致（hal「跨
+    HAL 行为不变面」第②类影响面：E0506 为唯一 E05xx 目标分化点）。"""
+
+    _INJECTED = FLASH_ATTENTION.replace(
+        "    st = pipe.run(range(tis.cdiv(seq_len, BC)),",
+        "    y = pipe\n"
+        "    st = pipe.run(range(tis.cdiv(seq_len, BC)),",
+    )
+
+    def test_persistent_entry_diverges_by_target(self):
+        """FLASH 入口换 persistent_kernel：h200 四段零拒绝（入口体深检查
+        为 design residual 2）；ascend 以 E0506 拒。"""
+        source = FLASH_ATTENTION.replace("@tis.kernel", "@tis.persistent_kernel", 1)
+        assert pipeline.compile_stages(source, target="nvidia_h200") == []
+        rs = pipeline.compile_stages(source, target="ascend_910b")
+        assert [r.code for r in rs] == ["E0506"]
+        assert rs[0].stage == "execution-structure"
+        assert rs[0].line == 7    # 装饰器行
+
+    def test_language_layer_e05xx_identical_across_targets(self):
+        """同源 E05xx 语言层（E0502 pipe 值逃逸）两目标逐条一致。"""
+        h200 = pipeline.compile_stages(self._INJECTED, target="nvidia_h200")
+        ascend = pipeline.compile_stages(self._INJECTED, target="ascend_910b")
+        assert [r.to_dict() for r in h200] == [r.to_dict() for r in ascend]
+        assert [r.code for r in h200] == ["E0502"]
+
+    def test_e0506_adds_on_ascend_language_layer_unchanged(self):
+        """分化合成：kernel 源 + 追加 persistent 入口——ascend 输出 = h200
+        语言层条目 + E0506（装饰器行按位置升序在尾部）。"""
+        source = (self._INJECTED
+                  + "\n\n"
+                    "@tis.persistent_kernel\n"
+                    "def pk(O_ptr: Pointer[f32, Global], D: comptime[int] = 64):\n"
+                    "    O = tis.make_tensor(O_ptr, (D,))\n"
+                    "    return\n")
+        h200 = pipeline.compile_stages(source, target="nvidia_h200")
+        ascend = pipeline.compile_stages(source, target="ascend_910b")
+        assert [r.code for r in h200] == ["E0502"]
+        assert [r.code for r in ascend] == ["E0502", "E0506"]
+        lang_h = [r.to_dict() for r in h200]
+        lang_a = [r.to_dict() for r in ascend if r.code != "E0506"]
+        assert lang_h == lang_a

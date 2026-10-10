@@ -129,18 +129,16 @@ class TestR2Serialization:
 
 class TestR3HonestExit:
     def test_syntax_pass_incomplete_exit0(self, tmp_path, capsys):
-        """Scenario：已实现段（syntax + type-system + primitive-contract）零命中
-        → incomplete + 段清单 + exit 0。"""
+        """Scenario：已实现段（四段）零命中 → incomplete + 段清单 + exit 0。"""
         src = _write(tmp_path, "kernel.tis", VALID_KERNEL)
         code, out, err = _run(["compile", src, "--target", "nvidia_h200"], capsys)
         assert code == 0
         payload = json.loads(out)
         assert payload["status"] == "incomplete"
         assert payload["implemented_stages"] == [
-            "syntax", "type-system", "primitive-contract"]
-        assert set(payload["pending_stages"]) == {
-            "execution-structure", "numerics",
-        }
+            "syntax", "type-system", "primitive-contract",
+            "execution-structure"]
+        assert set(payload["pending_stages"]) == {"numerics"}
 
     def test_status_values_only_rejected_or_incomplete(self, tmp_path, capsys):
         """Scenario：passed 不可达——本 change 全部输出路径的 status 封闭二值。"""

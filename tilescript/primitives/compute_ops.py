@@ -47,6 +47,11 @@ _PRIM_SPECS = {
 # 关键字专属槽（R1：dot 的 mma/pad 不占位置槽位）。
 _KEYWORD_ONLY = {"dot": ("mma", "pad")}
 
+# 计算原语类别清单公共只读名（execution E0501 判定面——design D1 实施注记：
+# 跨包消费公共面而非 `_PRIM_SPECS` 私有名；清单扩展 MUST 经 change 的同步
+# 义务由引用承载）。
+COMPUTE_PRIMS = frozenset(_PRIM_SPECS)
+
 # 缺失必选报文的值域注记（R1 Scenario 4：reduce 缺 op 注明值域）。
 _REQUIRED_VALUE_DOMAINS = {"reduce": {"op": "Sum/Max"}}
 

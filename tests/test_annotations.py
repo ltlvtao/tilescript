@@ -211,10 +211,12 @@ class TestCheckPositions:
 class TestNestedPipelineSignatures:
     """代码审查 cycle 1 Major 1：kernel 内嵌套 `@pipe.produce/consume` 签名
     注解是 R1 明文辖域（语法层不检查注解类别，类型层是其唯一防线）——
-    全部经公共管线 compile_stages 验证。"""
+    经类型段直测验证（第四段接入后载体形态归执行段契约，见 _nested）。"""
 
     def _nested(self, inner_sig: str):
-        from tilescript import pipeline
+        """嵌套签名载体走类型段直测（第四段接入后显式调用/Pipeline 缺参
+        形态归 E0502 执行段承载，类型段单面直测保持焦点）。"""
+        from tilescript import typecheck
         source = (
             "import tis\n"
             "\n"
@@ -229,7 +231,7 @@ class TestNestedPipelineSignatures:
             f"{inner_sig}"
             "    return\n"
         )
-        return pipeline.compile_stages(source, target="nvidia_h200")
+        return typecheck.check_module(ast.parse(source))
 
     def test_nested_param_annotation_rejected(self):
         """嵌套 produce 形参注解 f64 → E0302 unknown-dtype（审查探针 1）。"""
