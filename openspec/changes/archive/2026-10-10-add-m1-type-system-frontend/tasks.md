@@ -52,4 +52,4 @@
 ## 9. 流程闭环
 
 - [x] 9.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）
-- [ ] 9.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）
+- [x] 9.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）（cycle 1 两轮：round1 CHANGES_REQUESTED 6 findings → round2 PASS 6/6 resolved；H2 APPROVED 2026-10-10；push 323e5e3 含 pre-push strict 10/10 + pytest 189 passed）
