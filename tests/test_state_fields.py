@@ -82,7 +82,9 @@ class TestE0304Rejections:
         assert len(rejections) == 1
         r = rejections[0]
         assert r.code == "E0304" and r.category == "state-field-pointer"
-        assert "kernel 形参" in r.suggestion or "形参" in r.suggestion
+        # Minor 5：建议须点明「Register scope 的 Tensor」与 kernel 形参路径。
+        assert "Register scope 的 Tensor" in r.suggestion
+        assert "kernel 形参" in r.suggestion
 
     def test_scalar_field_rejected(self):
         """R5 delta 新增 Scenario：`count: int` 标量字段 → E0304。"""
@@ -98,6 +100,29 @@ class TestE0304Rejections:
         r = rejections[0]
         assert r.code == "E0304" and r.category == "state-field-scalar"
         assert "Tensor" in r.suggestion
+
+    def test_registered_state_class_name_field_rejected(self):
+        """R5 delta：已注册状态类名字段（`inner: Inner`）→ E0304 state-field-scalar
+        （非 E0302——解析成功为 StateType，属「既非 Tensor 也非 Pointer」路径）。"""
+        src = (
+            "import tis\n"
+            "\n"
+            "@tis.state\n"
+            "class Inner:\n"
+            "    x: Tensor[f32, (64,), Register]\n"
+            "\n"
+            "\n"
+            "@tis.state\n"
+            "class Outer:\n"
+            "    inner: Inner\n"
+        )
+        registry, rejections = _check(src)
+        assert len(rejections) == 1
+        r = rejections[0]
+        assert r.code == "E0304" and r.category == "state-field-scalar"
+        assert (r.line, r.col) == (10, 12)  # `Inner` 注解起点（col 1 起算）
+        # 违规字段仍入注册表（绑定检查用声明类型）
+        assert [n for n, _ in registry["Outer"].fields] == ["inner"]
 
     def test_structurally_broken_annotation_reports_e0302_only(self):
         """同位置 E0302 优先：结构坏的字段不产 E0304（一注解一结果）。"""

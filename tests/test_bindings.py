@@ -161,107 +161,137 @@ class TestUnknownRelinquishment:
 
 
 class TestReturnAndCalls:
-    def test_return_checked_against_annotation(self):
-        """return × 返回注解（consume 形态）。"""
+    """return×返回注解与第 4 类调用实参绑定——全部经 kernel 内嵌套
+    `@pipe.*` 真实形态走公共管线（模块级 @tis.* 形态被语法段拒绝）。"""
+
+    def _pipeline(self, body_inner: str, call_stmts: str, kernel_params="n: int"):
+        from tilescript import pipeline
         source = (
             "import tis\n"
             "\n"
-            "@tis.consume\n"
-            "def epilogue(st: Tensor[f16, (64,), Register]"
-            ") -> Tensor[f32, (64,), Register]:\n"
-            "    return st\n"
+            "@tis.kernel\n"
+            f"def k({kernel_params}):\n"
+            "    pipe = tis.Pipeline(stages=2)\n"
+            "\n"
+            f"{body_inner}"
+            "\n"
+            f"{call_stmts}"
+            "    return\n"
         )
-        tree, _ = carrier.parse(source)
-        comptime = symbols.kernel_comptime_names(tree)
-        registry, _ = state_fields.check(tree, comptime_syms=comptime)
-        rs = bindings.check_device_functions(tree, registry, comptime)
+        return pipeline.compile_stages(source)
+
+    def test_return_checked_against_annotation(self):
+        """return × 返回注解（嵌套 consume 形态）。"""
+        from tilescript import pipeline
+        source = (
+            "import tis\n"
+            "\n"
+            "@tis.kernel\n"
+            "def k(a: Tensor[f16, (64,), Register]):\n"
+            "    pipe = tis.Pipeline(stages=2)\n"
+            "\n"
+            "    @pipe.consume\n"
+            "    def epilogue(j: int, buf) -> Tensor[f32, (64,), Register]:\n"
+            "        return a\n"
+            "\n"
+            "    return\n"
+        )
+        rs = pipeline.compile_stages(source)
         assert [r.code for r in rs] == ["E0303"] and rs[0].category == "return"
         assert "tis.cast" in rs[0].suggestion
 
     def test_return_without_annotation_not_checked(self):
-        source = (
-            "import tis\n"
-            "\n"
-            "@tis.produce\n"
-            "def p(x: Tensor[f16, (64,), Register]):\n"
-            "    return 5\n"
+        rs = self._pipeline(
+            "    @pipe.produce\n"
+            "    def p(j: int, buf):\n"
+            "        return 5\n",
+            "",
         )
-        tree, _ = carrier.parse(source)
-        comptime = symbols.kernel_comptime_names(tree)
-        registry, _ = state_fields.check(tree, comptime_syms=comptime)
-        assert bindings.check_device_functions(tree, registry, comptime) == []
+        assert rs == []
 
     def test_state_ctor_kwarg_mismatch_rejected(self):
         """Scenario R7 L193：构造关键字实参类型×字段声明类型，定位实参。"""
-        prelude = (
+        from tilescript import pipeline
+        source = (
+            "import tis\n"
+            "\n"
             "@tis.state\n"
             "class AttnState:\n"
             "    m: Tensor[f32, (64,), Register]\n"
             "    l: Tensor[f32, (64,), Register]\n"
             "\n"
+            "@tis.kernel\n"
+            "def k(a: Tensor[f16, (64,), Register],"
+            " b: Tensor[f32, (64,), Register]):\n"
+            "    st = AttnState(m=a, l=b)  # m 字段 f32 × 实参 a f16 → E0303\n"
+            "    return\n"
         )
-        rs = _run(_indented(
-            "st = AttnState(m=a, l=b)",  # m 字段 f32 × 实参 a f16 → E0303
-        ), kernel_params_decl="a: Tensor[f16, (64,), Register], "
-                              "b: Tensor[f32, (64,), Register]",
-            prelude=prelude)
+        rs = pipeline.compile_stages(source)
         assert [r.code for r in rs] == ["E0303"]
-        r = rs[0]
-        assert r.category == "state-ctor-arg"
-        assert (r.line, r.col) == (11, 22)  # 关键字实参值节点（col 1 起始）
+        assert rs[0].category == "state-ctor-arg"
+        assert (rs[0].line, rs[0].col) == (10, 22)  # 关键字实参值节点
 
-    def test_annotated_call_args_checked(self):
-        """D7 第 4 类：显式调用带注解 produce/consume——位置/关键字实参×形参注解。"""
-        helpers = (
-            "@tis.produce\n"
-            "def inner(j: int, buf):\n"
-            "    ...\n"
-            "\n"
+    def test_annotated_call_args_checked_through_pipeline(self):
+        """D7 第 4 类：显式调用嵌套 produce——comptime 值 → int 位接受（R7 L188）。"""
+        body = (
+            "    @pipe.produce\n"
+            "    def inner(j: int, buf):\n"
+            "        ...\n"
         )
-        rs = _run(_indented(
-            "inner(64)",       # comptime 值 → int 位：单向兼容接受（R7 L188）
-            "inner(j=n)",      # int 形参 × int 变量：等价接受
-        ), kernel_params_decl="n: int", prelude=helpers)
+        rs = self._pipeline(body, "    inner(64)\n    inner(j=n)\n")
         assert rs == []
-
-        rs = _run(_indented(
-            "inner(n)",        # int 值 → int：接受
-            "x = 5",
-            "inner(x)",       # comptime_int → int：单向兼容接受
-            "inner(a)",       # Tensor → int 形参：拒绝
-        ), kernel_params_decl="n: int, a: Tensor[f16, (64,), Register]",
-            prelude=helpers)
+        rs = self._pipeline(
+            body,
+            "    x = 5\n"
+            "    inner(x)\n"      # comptime_int → int：单向兼容接受
+            "    inner(a)\n",     # Tensor → int 形参：拒绝
+            kernel_params="n: int, a: Tensor[f16, (64,), Register]",
+        )
         assert [r.code for r in rs] == ["E0303"]
         assert rs[0].category == "call-arg" and "标量种类" in rs[0].suggestion
 
+    def test_runtime_int_to_comptime_position_rejected(self):
+        """R2 Scenario：运行期 int 值绑定 comptime[int] 位置 → E0303（反向不兼容）。"""
+        body = (
+            "    @pipe.produce\n"
+            "    def inner(j: comptime[int], buf):\n"
+            "        ...\n"
+        )
+        assert self._pipeline(body, "    inner(64)\n") == []      # comptime 常量接受
+        rs = self._pipeline(body, "    inner(n)\n")              # 运行期 int 拒绝
+        assert [r.code for r in rs] == ["E0303"]
+        assert rs[0].category == "call-arg" and "comptime" in rs[0].suggestion
+
     def test_unannotated_call_and_position_ctor_not_checked(self):
         """负例：无注解形参位不查；状态构造位置实参不查（proposal 非目标）。"""
-        helpers = (
-            "@tis.produce\n"
-            "def inner(j, buf):\n"
-            "    ...\n"
+        from tilescript import pipeline
+        source = (
+            "import tis\n"
             "\n"
-        )
-        prelude = (
             "@tis.state\n"
             "class S:\n"
             "    m: Tensor[f32, (64,), Register]\n"
             "\n"
+            "@tis.kernel\n"
+            "def k(a: Tensor[f16, (64,), Register]):\n"
+            "    pipe = tis.Pipeline(stages=2)\n"
+            "\n"
+            "    @pipe.produce\n"
+            "    def inner(j, buf):\n"
+            "        ...\n"
+            "\n"
+            "    inner(a, a)\n"     # 形参无注解：不查
+            "    st = S(a)\n"       # 构造位置实参：不查
+            "    return\n"
         )
-        rs = _run(_indented(
-            "inner(a, a)",     # 形参无注解：不查
-            "st = S(a)",       # 构造位置实参：不查
-        ), kernel_params_decl="a: Tensor[f16, (64,), Register]",
-            prelude=helpers + prelude)
-        assert rs == []
+        assert pipeline.compile_stages(source) == []
 
     def test_explicit_call_legality_not_reported(self):
         """负例：produce/consume 显式调用合法性归 E0502——M1 本段不报调用本身。"""
-        helpers = (
-            "@tis.produce\n"
-            "def inner(j: int):\n"
-            "    ...\n"
-            "\n"
+        rs = self._pipeline(
+            "    @pipe.produce\n"
+            "    def inner(j: int):\n"
+            "        ...\n",
+            "    inner(5)\n",
         )
-        rs = _run(_indented("inner(5)"), prelude=helpers)
         assert rs == []

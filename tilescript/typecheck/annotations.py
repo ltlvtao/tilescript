@@ -178,6 +178,18 @@ def _is_comptime(dim):
     return dim.comptime
 
 
+def is_produce_consume(node) -> bool:
+    """produce/consume 装饰识别：真实形态为 kernel 内嵌套 `@pipe.produce`/
+    `@pipe.consume`（execution spec 与集成样例的唯一形态）与模块级
+    `@tis.produce`（语法段 E0103 拒绝，宽识别无害）。"""
+    for dec in node.decorator_list:
+        if isinstance(dec, ast.Name) and dec.id in ("produce", "consume"):
+            return True
+        if isinstance(dec, ast.Attribute) and dec.attr in ("produce", "consume"):
+            return True
+    return False
+
+
 def _reject(node, category, suggestion):
     return Rejection(code="E0302", line=node.lineno, col=node.col_offset + 1,
                      category=category, suggestion=suggestion, order=_ORDER,
@@ -192,16 +204,16 @@ def check(tree: ast.Module, comptime_syms=frozenset(), registry=None):
     3. produce/consume 形参与返回注解（查注册表——状态类名 → StateType）。
 
     无注解形参与 None 返回注解跳过（D7：无注解形参位不查）。
-    三类位置之外的普通函数注解不查（M1 边界）。
+    三类位置之外的普通函数注解不查（M1 边界）。produce/consume 识别含
+    kernel 内嵌套 `@pipe.*` 属性形态（R1：语法层不检查注解类别，类型层
+    是嵌套签名注解结构的唯一防线）。
     """
     rejections: "list[Rejection]" = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         is_kernel = _has_tis_decorator(node, "kernel")
-        is_produce_consume = (_has_tis_decorator(node, "produce")
-                              or _has_tis_decorator(node, "consume"))
-        if not (is_kernel or is_produce_consume):
+        if not (is_kernel or is_produce_consume(node)):
             continue
         reg = None if is_kernel else registry
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:

@@ -11,7 +11,7 @@
 
 - [x] 2.1 `typecheck/annotations.py` 解析器：合法三形态通过（Tensor 三参/Pointer 两参/Tensor 四参 layout）；未知 dtype（列六值）/参数顺序/集合外 scope/参数数量 → E0302 类别与建议（R1×4 Scenario）
 - [x] 2.2 shape 组件类别判定：int 字面量→ConstDim、comptime 符号→SymbolDim(True)、int 符号→SymbolDim(False)、算术→DerivedDim（操作数 comptime 性递归）；float（2.5）→ E0302（R2 浮点组件 Scenario）；`comptime[int]` 与 dtype 标量注解解析（R2 动态维度/dtype 标量两 Scenario）
-- [ ] 2.3 三类检查位置接入：kernel 签名、`@tis.state` 字段、produce/consume 形参与返回注解（含状态类名注解→StateType，查 3.2 注册表）；同位置一注解一结果（结构失败不产类型）——依赖 3.1/3.2 先行
+- [x] 2.3 三类检查位置接入：kernel 签名、`@tis.state` 字段、produce/consume 形参与返回注解（含状态类名注解→StateType，查 3.2 注册表）；同位置一注解一结果（结构失败不产类型）——依赖 3.1/3.2 先行（cycle 1 审查后补齐嵌套 `@pipe.*` 签名辖域：probe `Tensor[f64,...]` 返回注解 → E0302；验证 `pytest tests/test_annotations.py tests/test_bindings.py` 189 passed）
 
 ## 3. 状态类 E0304 与注册表（R5）
 

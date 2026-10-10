@@ -14,7 +14,7 @@ from tilescript.frontend.top_level import _has_tis_decorator
 
 from . import infer as infer_mod
 from . import symbols
-from .annotations import parse_annotation
+from .annotations import is_produce_consume, parse_annotation
 from .types import UNKNOWN, treats_as_unknown
 
 
@@ -28,7 +28,7 @@ def check_device_functions(tree: ast.Module, registry, comptime_syms=frozenset()
             continue
         if _has_tis_decorator(node, "kernel"):
             env = dict(kernel_env)
-        elif _has_tis_decorator(node, "produce") or _has_tis_decorator(node, "consume"):
+        elif is_produce_consume(node):
             # 外层快照（kernel 形参）+ 自身形参（含状态类/buffer UNKNOWN）。
             env = dict(kernel_env)
             for arg in symbols._params(node):
@@ -80,7 +80,7 @@ def _walk(stmts, inc, returns):
                           if stmt.handlers else []):
                 _walk(block, inc, returns)
         elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if _decorated_produce_consume(stmt):
+            if is_produce_consume(stmt):
                 _walk_nested(stmt, inc)
         # Pass/Break/Continue/Assert 等：无绑定动作。
 
@@ -129,17 +129,6 @@ def _walk_nested(fn, inc):
     _walk(fn.body, inc, returns)
     inc.env.clear()
     inc.env.update(snapshot)
-
-
-def _decorated_produce_consume(fn) -> bool:
-    """produce/consume 装饰识别：`@pipe.produce`/`@tis.produce` 属性形态与
-    裸名形态（模块级由 annotated_functions 承载，此分支只处理嵌套形态）。"""
-    for dec in fn.decorator_list:
-        if isinstance(dec, ast.Name) and dec.id in ("produce", "consume"):
-            return True
-        if isinstance(dec, ast.Attribute) and dec.attr in ("produce", "consume"):
-            return True
-    return False
 
 
 def _is_none_node(node) -> bool:

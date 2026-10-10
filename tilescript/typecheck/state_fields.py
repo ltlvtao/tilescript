@@ -24,20 +24,21 @@ def check(tree: ast.Module, comptime_syms=frozenset()):
     """全部 @tis.state 类 → (注册表, E0302/E0304 拒绝清单)。
 
     注册表：类名 → StateType（类体声明序字段）；同名类按首次注册
-    （design D11 residual 2）。
+    （design D11 residual 2）。字段注解解析传入 registry（源码序渐进可见）：
+    已注册状态类名字段构成「既非 Tensor 也非 Pointer」→ E0304（R5 delta）。
     """
     registry: "dict[str, StateType]" = {}
     rejections: "list[Rejection]" = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and _has_tis_decorator(node, "state"):
-            fields, field_rejections = _check_class(node, comptime_syms)
+            fields, field_rejections = _check_class(node, comptime_syms, registry)
             rejections.extend(field_rejections)
             if node.name not in registry:
                 registry[node.name] = StateType(node.name, tuple(fields))
     return registry, rejections
 
 
-def _check_class(cls: ast.ClassDef, comptime_syms):
+def _check_class(cls: ast.ClassDef, comptime_syms, registry):
     fields: "list[tuple[str, object]]" = []
     rejections: "list[Rejection]" = []
     for stmt in cls.body:
@@ -46,7 +47,8 @@ def _check_class(cls: ast.ClassDef, comptime_syms):
                 and isinstance(stmt.target, ast.Name)):
             continue
         annotation, rejection = parse_annotation(stmt.annotation,
-                                                 comptime_syms=comptime_syms)
+                                                 comptime_syms=comptime_syms,
+                                                 registry=registry)
         if rejection is not None:
             rejections.append(rejection)  # E0302（order=1）；无类型不入表
             continue
@@ -71,7 +73,8 @@ def _rej(stmt: ast.AnnAssign, category: str) -> Rejection:
             "状态类字段必须位于 Register；跨状态空间的数据（Global/Shared）"
             "须以 kernel 形参或显式移动原语承载，不进状态类。",
         "state-field-pointer":
-            "状态类字段不支持 Pointer 类型；指针须作为 kernel 形参传递。",
+            "状态类字段只接受 Register scope 的 Tensor；Pointer 不合法，"
+            "指针须作为 kernel 形参传递。",
         "state-field-scalar":
             "状态类字段必须是 Tensor[..., Register]；标量或嵌套状态类不合法。",
     }

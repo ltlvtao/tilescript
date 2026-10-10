@@ -206,3 +206,58 @@ class TestCheckPositions:
             "    ...\n"
         )
         assert self._check(src) == []
+
+
+class TestNestedPipelineSignatures:
+    """代码审查 cycle 1 Major 1：kernel 内嵌套 `@pipe.produce/consume` 签名
+    注解是 R1 明文辖域（语法层不检查注解类别，类型层是其唯一防线）——
+    全部经公共管线 compile_stages 验证。"""
+
+    def _nested(self, inner_sig: str):
+        from tilescript import pipeline
+        source = (
+            "import tis\n"
+            "\n"
+            "@tis.state\n"
+            "class S:\n"
+            "    m: Tensor[f32, (64,), Register]\n"
+            "\n"
+            "@tis.kernel\n"
+            "def k(a: Tensor[f16, (64,), Register]):\n"
+            "    pipe = tis.Pipeline(stages=2)\n"
+            "\n"
+            f"{inner_sig}"
+            "    return\n"
+        )
+        return pipeline.compile_stages(source)
+
+    def test_nested_param_annotation_rejected(self):
+        """嵌套 produce 形参注解 f64 → E0302 unknown-dtype（审查探针 1）。"""
+        rs = self._nested(
+            "    @pipe.produce\n"
+            "    def fetch(j: int, buf: Tensor[f64, (64,), Register]):\n"
+            "        ...\n"
+        )
+        assert [r.code for r in rs] == ["E0302"]
+        assert rs[0].category == "unknown-dtype"
+
+    def test_nested_return_annotation_rejected(self):
+        """嵌套 consume 返回注解 Distributed → E0302 unknown-scope。"""
+        rs = self._nested(
+            "    @pipe.consume\n"
+            "    def epilogue(st: S, buf)"
+            " -> Tensor[f32, (64,), Distributed]:\n"
+            "        ...\n"
+        )
+        assert [r.code for r in rs] == ["E0302"]
+        assert rs[0].category == "unknown-scope"
+
+    def test_nested_legal_signature_with_state_class_accepted(self):
+        """合法嵌套签名（状态类名形参 + Pointer + 返回注解）零拒绝。"""
+        rs = self._nested(
+            "    @pipe.consume\n"
+            "    def epilogue(st: S, buf,"
+            " out: Pointer[f32, Global]) -> Tensor[f32, (64,), Register]:\n"
+            "        ...\n"
+        )
+        assert rs == []

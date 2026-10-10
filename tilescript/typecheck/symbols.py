@@ -4,7 +4,7 @@ import ast
 
 from tilescript.frontend.top_level import _has_tis_decorator
 
-from .annotations import parse_annotation
+from .annotations import is_produce_consume, parse_annotation
 from .types import UNKNOWN
 
 
@@ -44,18 +44,18 @@ def kernel_params(tree: ast.Module, comptime_syms=frozenset()) -> dict:
 
 
 def annotated_functions(tree: ast.Module, registry=None, comptime_syms=frozenset()) -> dict:
-    """模块级 produce/consume 函数：名 → {"params": [(形参名, 类型)],
-    "returns": 返回注解类型 | None}。
+    """produce/consume 函数（含 kernel 内嵌套形态）：名 → {"params":
+    [(形参名, 类型)], "returns": 返回注解类型 | None}。
 
     无注解或注解结构解析失败（E0302 已另行报告）的形参按 UNKNOWN 让渡
     （绑定检查遇 UNKNOWN 跳过）；returns 为 None 表示无返回注解（不查）。
     契约违规（形参个数/位置形态）归 E0502，本表只消费可解析部分（design D3）。
     """
     out = {}
-    for node in tree.body:
+    for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        if not (_has_tis_decorator(node, "produce") or _has_tis_decorator(node, "consume")):
+        if not is_produce_consume(node):
             continue
         params = []
         for arg in _params(node):
