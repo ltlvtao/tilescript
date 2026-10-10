@@ -212,6 +212,18 @@ class TestPipelineValue:
         r = _single(_check(source), "E0502")
         assert r.category == "ctor-nested-position"
 
+    def test_ctor_inside_with_body_rejected(self):
+        """with 体内构造：非 kernel 顶层（round 2 同源位置缺口）。"""
+        base = _CTOR_BASE.replace("__PRELUDE__", "").replace(
+            "__CTOR__", 'stages=STAGES, buffers={"K": K_s}')
+        source = base.replace(
+            '    pipe = tis.Pipeline(stages=STAGES, buffers={"K": K_s})',
+            '    with tis.warp_group(role="consumer", warps=2) as g1:\n'
+            '        pipe = tis.Pipeline(stages=STAGES, buffers={"K": K_s})')
+        r = _single(_check(source), "E0502")
+        assert r.category == "ctor-nested-position"
+        assert "顶层" in r.suggestion
+
     def test_pipeline_as_load_arg_rejected(self):
         r = _single(self._with_pipe("    tis.load(K_s, pipe)"), "E0502")
         assert r.category == "pipeline-value-escape"
@@ -473,6 +485,19 @@ class TestRunContract:
         r = _single(_check(source), "E0502")
         assert r.category == "run-init"
         assert "同一状态类" in r.suggestion
+
+    def test_run_inside_with_body_rejected(self):
+        """with 体内 run：位置拒且不入顶层生命周期（round 2 同源缺口——
+        收尾零 run 报文随之出现，两位置各自成立）。"""
+        source = _SIG_BASE.replace(
+            "    st = pipe.run(range(seq_len),\n"
+            "                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))",
+            '    with tis.warp_group(role="consumer", warps=2) as g1:\n'
+            '        st = pipe.run(range(seq_len), '
+            'init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))')
+        rs = _check(source)
+        assert [r.category for r in rs] == ["run-lifecycle", "run-position"]
+        assert "顶层" in rs[1].suggestion
 
     def test_run_in_nested_rejected(self):
         source = _SIG_BASE.replace(

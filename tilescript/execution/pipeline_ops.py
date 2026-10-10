@@ -39,10 +39,10 @@ def check_ctor(node, scanner):
     丢失）。M1 单实例：第二构造拒，实例表保持首构造。
     """
     violations = []   # (category, 文案)；报文 category 取首个
-    if scanner.in_nested is not None:
+    if scanner.in_nested is not None or scanner.in_with:
         violations.append(("ctor-nested-position",
                            "构造调用只能出现在 kernel 顶层函数体；不能在 "
-                           "produce/consume 嵌套函数体内构造。"))
+                           "produce/consume 嵌套函数体或 with 语句体内构造。"))
     for arg in node.args:
         scanner.scan_expr(arg)
     if node.args:
@@ -224,9 +224,10 @@ def check_run(node, scanner):
         return shape_env.UNKNOWN
 
     violations = []
-    if scanner.in_nested is not None:
+    if scanner.in_nested is not None or scanner.in_with:
         violations.append(("run-position",
-                           "run 调用只能出现在 kernel 顶层函数体。"))
+                           "run 调用只能出现在 kernel 顶层函数体"
+                           "（不能在嵌套函数体或 with 语句体内）。"))
     if len(node.args) != 1:
         violations.append(("run-arity",
                            "run 恰接受两实参：位置 0 为 range(...) 调用，"
@@ -271,7 +272,7 @@ def check_run(node, scanner):
                        "".join(text for _, text in violations))
     if recv_shape == shape_env.PIPELINE and scanner.pipe is not None:
         p = scanner.pipe
-        if scanner.in_nested is not None:
+        if scanner.in_nested is not None or scanner.in_with:
             pass   # 位置违规已报；不入顶层生命周期
         else:
             if p.run_count >= 1:
