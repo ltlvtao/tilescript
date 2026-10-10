@@ -229,7 +229,7 @@ class TestNestedPipelineSignatures:
             f"{inner_sig}"
             "    return\n"
         )
-        return pipeline.compile_stages(source)
+        return pipeline.compile_stages(source, target="nvidia_h200")
 
     def test_nested_param_annotation_rejected(self):
         """嵌套 produce 形参注解 f64 → E0302 unknown-dtype（审查探针 1）。"""

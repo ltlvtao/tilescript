@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "changeId": "add-m1-primitive-contract-frontend", "baseSha": "9e409d0", "note": "M1 第三检查段：primitives E0402-E0408 实现面 + HAL 首个消费面 + pipeline 第三段 + cli 快照联动" }

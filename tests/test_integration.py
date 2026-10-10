@@ -114,10 +114,22 @@ class TestInjection:
         assert payload["rejections"][1]["category"] == "list-comprehension"
 
 
-class TestFlashAttentionBothStages:
-    def test_both_stages_zero_rejections(self):
-        """两段（syntax + type-system）零拒绝：已知面等价、让渡面 UNKNOWN。"""
-        assert pipeline.compile_stages(FLASH_ATTENTION) == []
+class TestFlashAttentionThreeStages:
+    def test_three_stages_zero_rejections(self):
+        """三段（syntax/type/primitive）零拒绝：load 切片折叠支 (bm+1)*BR-
+        bm*BR → BR 贯通、dot 的 buf.* 操作数 UNKNOWN 让渡、算术/pipe 让渡。"""
+        assert pipeline.compile_stages(FLASH_ATTENTION, target="nvidia_h200") == []
+
+    def test_dot_known_face_comptime_dims(self):
+        """dot 已知面（tasks 6.1）：buf.K → K_s 后非让渡路径——E0402 列表
+        命中 (16,8,16)、E0403 全 comptime 符号维不触发（D5）。"""
+        source = FLASH_ATTENTION.replace(
+            "S = tis.dot(Q_s, tis.transpose(buf.K),"
+            " tis.zeros((BR, BC), f32, Register),",
+            "S = tis.dot(Q_s, tis.transpose(K_s),"
+            " tis.zeros((BR, BC), f32, Register),",
+        )
+        assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
     def test_known_face_equivalent_no_rejection(self):
         """已知面收紧回归：构造实参与字段声明同型（st.m/st.l 直传）不报。"""
@@ -125,10 +137,10 @@ class TestFlashAttentionBothStages:
             "        return AttnState(O_acc=O_new, m=m_new, l=l_new)",
             "        return AttnState(O_acc=O_new, m=st.m, l=st.l)",
         )
-        assert pipeline.compile_stages(source) == []
+        assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
-    def test_cli_end_to_end_incomplete_two_stages(self, tmp_path, capsys):
-        """CLI 端到端：exit 0 + incomplete 两段清单。"""
+    def test_cli_end_to_end_incomplete_three_stages(self, tmp_path, capsys):
+        """CLI 端到端：exit 0 + incomplete 三段清单（原语段接入后）。"""
         src = tmp_path / "flash.tis"
         src.write_text(FLASH_ATTENTION, encoding="utf-8")
         capsys.readouterr()
@@ -136,9 +148,10 @@ class TestFlashAttentionBothStages:
         payload = json.loads(capsys.readouterr().out)
         assert code == 0
         assert payload["status"] == "incomplete"
-        assert payload["implemented_stages"] == ["syntax", "type-system"]
+        assert payload["implemented_stages"] == [
+            "syntax", "type-system", "primitive-contract"]
         assert set(payload["pending_stages"]) == {
-            "primitive-contract", "execution-structure", "numerics"}
+            "execution-structure", "numerics"}
 
     def test_nested_consume_return_binding_checked(self):
         """嵌套 consume 体在检查面内：return 值类型×返回注解可违规。"""
@@ -146,7 +159,7 @@ class TestFlashAttentionBothStages:
             "        return AttnState(O_acc=O_new, m=m_new, l=l_new)",
             "        return 5",
         )
-        rs = pipeline.compile_stages(source)
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
         assert [r.code for r in rs] == ["E0303"]
         assert rs[0].category == "return"
 
@@ -158,7 +171,7 @@ class TestFlashAttentionBothStages:
             "    x = 5\n"
             "    y = Q[x : x + 16]\n",
         )
-        assert pipeline.compile_stages(source) == []
+        assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
 
 class TestKnownFaceE0303ThroughCli:
@@ -183,3 +196,31 @@ class TestKnownFaceE0303ThroughCli:
         r = payload["rejections"][0]
         assert r["category"] == "state-ctor-arg" and "tis.cast" in r["suggestion"]
         assert set(r.keys()) == {"code", "line", "col", "category", "suggestion"}
+
+
+class TestCrossTargetConsistency:
+    """hal「跨 HAL 行为不变面」Scenario 3：同源语言层拒绝两目标逐条一致；
+    HAL 依赖拒绝按目标分化（tasks 6.2）。"""
+
+    _SOURCE = (
+        "import tis\n"
+        "\n"
+        "@tis.kernel\n"
+        "def k(d: Tensor[f32, (64, 8), Global], s: Tensor[f32, (64, 8), Register]):\n"
+        "    tis.load(d, s, mode=Fast)\n"                              # 语言层 E0406
+        "    r = tis.reduce(s, axis=1, op=Max, scope=Warp)\n"          # HAL 依赖面
+        "    return\n"
+    )
+
+    def test_language_layer_identical_hal_differs(self):
+        h200 = pipeline.compile_stages(self._SOURCE, target="nvidia_h200")
+        ascend = pipeline.compile_stages(self._SOURCE, target="ascend_910b")
+        # 语言层条目（非 HAL 依赖）两目标逐条一致（含建议文本）。
+        lang_h = [r.to_dict() for r in h200 if r.category != "scope-unsupported"]
+        lang_a = [r.to_dict() for r in ascend if r.category != "scope-unsupported"]
+        assert lang_h == lang_a and len(lang_h) == 1
+        # h200 支持 Warp：仅语言层一条；ascend_910b 追加 HAL 支持面拒绝。
+        assert [r.code for r in h200] == ["E0406"]
+        assert [r.code for r in ascend] == ["E0406", "E0408"]
+        assert ascend[1].category == "scope-unsupported"
+        assert "Block" in ascend[1].suggestion  # 目标支持清单

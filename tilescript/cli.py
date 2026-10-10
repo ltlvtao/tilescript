@@ -36,8 +36,9 @@ def main(argv: "list[str] | None" = None) -> int:
         print(f"拒绝：源文件不可读：{args.source}", file=sys.stderr)
         return 2
 
-    # 已实现检查段（syntax + type-system；其余段由后续 change 实现，诚实列出）。
-    rejections = pipeline.compile_stages(source_text)
+    # 已实现检查段（syntax/type-system/primitive-contract；其余段由后续
+    # change 实现，诚实列出）。target 透传 pipeline（HAL 依赖检查输入）。
+    rejections = pipeline.compile_stages(source_text, target=args.target)
     if rejections:
         payload = {
             "status": "rejected",

@@ -28,13 +28,13 @@ class TestInterStageShortCircuit:
             "    x = [i for i in row]\n"   # L5：E0106（语法拒绝）
             "    b = a\n"                   # 若类型段执行将报 E0303
         )
-        rs = pipeline.compile_stages(source)
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
         assert [r.code for r in rs] == ["E0106"]
         assert all(r.code.startswith("E01") for r in rs)
 
     def test_carrier_rejection_short_circuits(self):
         """E0101 单条特例同样短路类型段。"""
-        rs = pipeline.compile_stages("def broken(:\n")
+        rs = pipeline.compile_stages("def broken(:\n", target="nvidia_h200")
         assert [r.code for r in rs] == ["E0101"]
 
     def test_clean_module_zero_rejections(self):
@@ -47,7 +47,7 @@ class TestInterStageShortCircuit:
             "    y = a\n"
             "    return\n"
         )
-        assert pipeline.compile_stages(source) == []
+        assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
 
 class TestReportContract:
@@ -62,7 +62,7 @@ class TestReportContract:
         )
         filler = "".join(f"    q{i} = {i}\n" for i in range(12))
         tail = "    b = a\n"  # E0303：f16 值绑 f32 目标
-        rs = pipeline.compile_stages(head + filler + tail)
+        rs = pipeline.compile_stages(head + filler + tail, target="nvidia_h200")
         assert [r.code for r in rs] == ["E0302", "E0303"]
         assert rs[0].line < rs[1].line
 
@@ -90,6 +90,54 @@ class TestReportContract:
             "    st = S(m=a)\n"
             "    b = a\n"
         )
-        first = [r.to_dict() for r in pipeline.compile_stages(source)]
-        second = [r.to_dict() for r in pipeline.compile_stages(source)]
+        first = [r.to_dict() for r in pipeline.compile_stages(source, target="nvidia_h200")]
+        second = [r.to_dict() for r in pipeline.compile_stages(source, target="nvidia_h200")]
         assert first == second and len(first) == 3  # E0304 + ctor-arg E0303 + assign E0303
+
+
+class TestPrimitiveStageWiring:
+    """原语契约段接入（三段完整序 + 类型段非空短路，R8 delta 直测）。"""
+
+    _TYPED_BROKEN = (
+        "import tis\n"
+        "\n"
+        "@tis.kernel\n"
+        "def k(gl: Tensor[f16, (16,), Global], sh: Tensor[f16, (16,), Shared],"
+        " b: Tensor[f32, (16,), Register]):\n"
+        "    b = gl\n"              # E0303：f16 值绑 f32 目标
+        "    tis.store(gl, sh)\n"   # 若原语段执行将报 E0404
+    )
+
+    _PRIMITIVE_BROKEN = (
+        "import tis\n"
+        "\n"
+        "@tis.kernel\n"
+        "def k(gl: Tensor[f16, (16,), Global], sh: Tensor[f16, (16,), Shared]):\n"
+        "    tis.store(gl, sh)\n"   # E0404：store 承载 load 格
+        "    return\n"
+    )
+
+    def test_type_rejection_suppresses_primitive_stage(self):
+        """类型段非空 → 原语段 MUST NOT 执行（潜在 E0404 不出现）。"""
+        rs = pipeline.compile_stages(self._TYPED_BROKEN, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0303"]
+        assert all(r.code.startswith("E03") for r in rs)
+
+    def test_primitive_rejection_reaches_report(self):
+        """类型段零命中 → 原语段拒绝上报（E0404）。"""
+        rs = pipeline.compile_stages(self._PRIMITIVE_BROKEN, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0404"]
+        assert rs[0].stage == "primitive-contract"
+
+    def test_three_stage_order(self):
+        """三段序实例化：语法/类型/原语各自单独命中时逐段上报。"""
+        # 语法段（E0106）
+        rs = pipeline.compile_stages("def broken(:\n", target="nvidia_h200")
+        assert all(r.code.startswith("E01") for r in rs)
+        # 原语段（E0404，同 _PRIMITIVE_BROKEN）
+        # 类型段（E0303，同 _TYPED_BROKEN）——上面两测已分别固定。
+
+    def test_implemented_stages_three(self):
+        """toolchain/cli R3 段清单唯一来源：三段登记。"""
+        assert pipeline.IMPLEMENTED_STAGES == (
+            "syntax", "type-system", "primitive-contract")

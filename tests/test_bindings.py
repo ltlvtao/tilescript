@@ -178,7 +178,7 @@ class TestReturnAndCalls:
             f"{call_stmts}"
             "    return\n"
         )
-        return pipeline.compile_stages(source)
+        return pipeline.compile_stages(source, target="nvidia_h200")
 
     def test_return_checked_against_annotation(self):
         """return × 返回注解（嵌套 consume 形态）。"""
@@ -196,7 +196,7 @@ class TestReturnAndCalls:
             "\n"
             "    return\n"
         )
-        rs = pipeline.compile_stages(source)
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
         assert [r.code for r in rs] == ["E0303"] and rs[0].category == "return"
         assert "tis.cast" in rs[0].suggestion
 
@@ -226,7 +226,7 @@ class TestReturnAndCalls:
             "    st = AttnState(m=a, l=b)  # m 字段 f32 × 实参 a f16 → E0303\n"
             "    return\n"
         )
-        rs = pipeline.compile_stages(source)
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
         assert [r.code for r in rs] == ["E0303"]
         assert rs[0].category == "state-ctor-arg"
         assert (rs[0].line, rs[0].col) == (10, 22)  # 关键字实参值节点
@@ -284,7 +284,7 @@ class TestReturnAndCalls:
             "    st = S(a)\n"       # 构造位置实参：不查
             "    return\n"
         )
-        assert pipeline.compile_stages(source) == []
+        assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
     def test_explicit_call_legality_not_reported(self):
         """负例：produce/consume 显式调用合法性归 E0502——M1 本段不报调用本身。"""
