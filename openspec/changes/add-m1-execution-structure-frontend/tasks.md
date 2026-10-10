@@ -54,5 +54,5 @@
 
 ## 11. 流程闭环
 
-- [ ] 11.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）
+- [x] 11.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）——已完成（实施前，2026-10-11）：设计审查两轮（round 1 CHANGES_REQUESTED 三 finding → 修订 → round 2 全 PASS），用户「批准」后 H1 记录已录入 h1.jsonl；账本见 reviews/
 - [ ] 11.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）

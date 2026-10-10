@@ -38,7 +38,10 @@ def check_module(tree: ast.Module, target: str) -> "list[report.Rejection]":
     comptime = symbols.kernel_comptime_names(tree)
     registry, _ = state_fields.check(tree, comptime_syms=comptime)
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and _has_tis_decorator(node, "kernel"):
+        # AsyncFunctionDef 与 primitives.traverse 同口径（语法段对 async
+        # def 全拒——E0103/E0105，管线下永不达本段；此处防御性同扫）。
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and _has_tis_decorator(node, "kernel"):
             scanner = KernelScanner(registry, comptime)
             scanner.scan_kernel(node)
             rejections.extend(scanner.rejections)
@@ -64,6 +67,7 @@ class KernelScanner:
         self.warp_lines: "list[int]" = []         # warp_group with 行号（源码序）
         self.warp_bindings: "dict[str, int]" = {}  # with 绑定名 → with 行号
         self.in_nested = None                     # None=kernel 顶层
+        self.in_with = 0                          # with 体深度（0=非 with 体内）
 
     # ---- 编排 -------------------------------------------------------------
 
@@ -164,7 +168,9 @@ class KernelScanner:
         outer = self.warp_role
         if roles:
             self.warp_role = roles[-1]  # 多 item 取最后语境（M1 单 item）
+        self.in_with += 1   # with 体内非 kernel 顶层（E0504 sync 位置判定）
         self.walk_stmts(stmt.body)
+        self.in_with -= 1
         self.warp_role = outer
 
     # ---- 表达式扫描（形态推断 + 值位置封闭 + tis.* 域分派）-------------------

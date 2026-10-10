@@ -240,6 +240,14 @@ class TestPipelineValue:
         r = _single(self._with_pipe("    x = pipe.produce"), "E0502")
         assert r.category == "pipeline-value-escape"
 
+    def test_receiver_violation_defers_range_legal_position(self):
+        """接收者违规早退路径：run 第一实参 range 合法位维持（cycle 1 minor
+        ——range 不被按值位报 range-value-escape）。"""
+        source = _SIG_BASE.replace("pipe.run(range(seq_len),", "K_s.run(range(seq_len),")
+        rs = _check(source)
+        assert [r.category for r in rs] == ["run-lifecycle", "member-receiver"]
+        assert not any(r.category == "range-value-escape" for r in rs)
+
     def test_produce_decorator_on_non_pipeline_rejected(self):
         base = _CTOR_BASE.replace("__PRELUDE__", "").replace(
             "__CTOR__", 'stages=STAGES, buffers={"K": K_s}')

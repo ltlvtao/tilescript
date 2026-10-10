@@ -65,6 +65,31 @@ class TestWarpGroupContract:
         r = _single(_check(_WG_BASE.replace("warps=2", "warps=seq_len")), "E0504")
         assert r.category == "wg-warps"
 
+    def test_sync_inside_second_with_body_rejected(self):
+        """sync 位于第二条 with 体内（非 kernel 顶层）→ 位置拒（cycle 1 Major）。"""
+        source = _WG_BASE.replace(
+            '    with tis.warp_group(role="consumer", warps=6) as cg:\n'
+            "        tis.barrier()\n"
+            "    tis.warp_group_sync(pg, cg, barrier_id=0)",
+            '    with tis.warp_group(role="consumer", warps=6) as cg:\n'
+            "        tis.barrier()\n"
+            "        tis.warp_group_sync(pg, cg, barrier_id=0)")
+        r = _single(_check(source), "E0504")
+        assert r.category == "sync-position"
+        assert "顶层" in r.suggestion
+
+    def test_sync_inside_first_with_body_reports_top_level(self):
+        """第一条 with 体内形态：报文理由为顶层位置（非「两个 with 之后」错位）。"""
+        source = _WG_BASE.replace(
+            '    with tis.warp_group(role="producer", warps=2) as pg:\n'
+            "        tis.barrier()",
+            '    with tis.warp_group(role="producer", warps=2) as pg:\n'
+            "        tis.barrier()\n"
+            "        tis.warp_group_sync(pg, pg, barrier_id=0)")
+        r = _single(_check(source), "E0504")
+        assert r.category == "sync-position"
+        assert "顶层" in r.suggestion
+
     def test_call_in_expression_position_rejected(self):
         source = _WG_BASE.replace(
             "    K_s = tis.alloc_shared((BR, 16), f16)",

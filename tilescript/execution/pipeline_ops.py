@@ -212,8 +212,13 @@ def check_run(node, scanner):
                        "（pipe = tis.Pipeline(...) 的绑定名）。")
     if not recv_ok:
         # 接收者违规：调用契约让渡（同调用只报首个）；实参仍扫描。
-        for arg in node.args:
-            scanner.scan_expr(arg)
+        # run 第一实参位的 range Call 维持合法位特判（不按值位报逃逸）。
+        for i, arg in enumerate(node.args):
+            if (i == 0 and isinstance(arg, ast.Call)
+                    and isinstance(arg.func, ast.Name) and arg.func.id == "range"):
+                builtins.check_range(arg, scanner)
+            else:
+                scanner.scan_expr(arg)
         for kw in node.keywords:
             scanner.scan_expr(kw.value)
         return shape_env.UNKNOWN
@@ -236,6 +241,7 @@ def check_run(node, scanner):
         for arg in node.args:
             scanner.scan_expr(arg)
     init = None
+    init_shape = None
     for kw in node.keywords:
         if kw.arg == "init":
             init = kw.value
@@ -247,19 +253,19 @@ def check_run(node, scanner):
     if init is None:
         violations.append(("run-init", "init= 必选关键字实参缺失。"))
     else:
-        shape = scanner.scan_expr(init)
-        if not isinstance(shape, shape_env.StateShape):
+        init_shape = scanner.scan_expr(init)
+        if not isinstance(init_shape, shape_env.StateShape):
             violations.append(("run-init",
                                "init= 实参必须为状态类类型的值"
                                "（@tis.state 类构造）。"))
         elif (scanner.pipe is not None
               and isinstance(scanner.pipe.consume_state, shape_env.StateShape)
-              and shape.class_name != scanner.pipe.consume_state.class_name):
+              and init_shape.class_name != scanner.pipe.consume_state.class_name):
             violations.append(("run-init",
                                "init= 状态类必须与 consume 第三形参注解为"
                                "同一状态类；consume 注解 "
                                f"{scanner.pipe.consume_state.class_name}，"
-                               f"init 为 {shape.class_name}。"))
+                               f"init 为 {init_shape.class_name}。"))
     if violations:
         scanner.reject(node, "E0502", violations[0][0],
                        "".join(text for _, text in violations))
@@ -283,7 +289,10 @@ def check_run(node, scanner):
                                    + "/".join(missing) + "。")
             p.run_count += 1
             p.run_nodes.append(node)
-    return shape_env.UNKNOWN
+    # run 结果绑定形态 = STATE_CLASS（design D3-2/D4-4——st 字段访问两形态
+    # 均让渡，M1 无第二消费位；违规时 init 形态缺失则 UNKNOWN）。
+    return init_shape if isinstance(init_shape, shape_env.StateShape) \
+        else shape_env.UNKNOWN
 
 
 def buf_attribute(node, scanner):

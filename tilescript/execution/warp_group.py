@@ -114,7 +114,7 @@ def check_sync(node, scanner):
     违规合并一条；绑定名实参为合法位（跳过值封闭）。
     """
     violations = []
-    if scanner.in_nested is not None:
+    if scanner.in_nested is not None or scanner.in_with:
         violations.append(("sync-position",
                            "warp_group_sync 只能以表达式语句形态出现在 "
                            "kernel 顶层函数体。"))
