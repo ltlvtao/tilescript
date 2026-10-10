@@ -55,4 +55,4 @@
 ## 11. 流程闭环
 
 - [x] 11.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）——已完成（实施前，2026-10-11）：设计审查两轮（round 1 CHANGES_REQUESTED 三 finding → 修订 → round 2 全 PASS），用户「批准」后 H1 记录已录入 h1.jsonl；账本见 reviews/
-- [ ] 11.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）
+- [x] 11.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）——已完成（2026-10-11）：代码审查 cycle 1 三轮闭环（round 1 CHANGES_REQUESTED 4 finding → 修复 commit 9bf2f9e → round 2 CHANGES_REQUESTED 同源新 major 1 + 4/4 resolved → 修复 commit c608ef6 → round 3 PASS 5/5 resolved 零新增，27 组探针独立复验）；H2 APPROVED 已录 `reviews/h2.jsonl`（commit 2fcc8f0）→ push 成功 `1ffa131..2fcc8f0 main`（pre-push strict 10/10 + 全量 467 passed）→ 归档 + 长期基线刷新按 design 计划执行（specs delta 并入 stable、overview 四段状态与三处基线行注记）

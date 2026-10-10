@@ -60,8 +60,8 @@ TileScript 工具链命令行域的行为契约：编译入口形态与目标参
 
 #### Scenario: 语法段全过的诚实退出
 
-- **WHEN** 合法 TileScript 模块（全部已实现段零命中——本 change 后已实现段为语法段、类型系统段与原语契约段）
-- **THEN** stdout 为 `status="incomplete"`、`implemented_stages=["syntax", "type-system", "primitive-contract"]`、`pending_stages` 含其余两段名，退出码 `0`
+- **WHEN** 合法 TileScript 模块（全部已实现段零命中——本 change 后已实现段为语法段、类型系统段、原语契约段与执行结构段）
+- **THEN** stdout 为 `status="incomplete"`、`implemented_stages=["syntax", "type-system", "primitive-contract", "execution-structure"]`、`pending_stages` 为 `["numerics"]`，退出码 `0`
 
 #### Scenario: passed 在五段全实现前不可达
 
