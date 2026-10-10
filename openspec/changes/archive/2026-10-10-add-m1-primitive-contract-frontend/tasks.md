@@ -42,5 +42,5 @@
 
 ## 7. 流程闭环
 
-- [ ] 7.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）
-- [ ] 7.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）
+- [x] 7.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）——验证：cycle 1 三轮闭环（round1 CHANGES_REQUESTED 6 minor + 3 info → round2 CHANGES_REQUESTED 1 minor + 1 info（修订引入一行级）→ round3 PASS 11/11 resolved）；H1 APPROVED 2026-10-10
+- [x] 7.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）——验证：cycle 1 两轮闭环（round1 CHANGES_REQUESTED 3 minor + 1 info → 修复 commit a219175 → round2 PASS 全 resolved + 1 info → commit 5d95334 措辞补全）；H2 APPROVED 2026-10-10；push 9e409d0..00ef8da（pre-push strict 10 items + 331 passed）；归档与基线刷新随本 commit
