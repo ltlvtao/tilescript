@@ -559,6 +559,14 @@ class TestStageOrderAndDeterminism:
         assert [r.code for r in rs] == ["E0402", "E0406"]
         assert [r.line for r in rs] == [5, 6]
 
+    def test_nested_violation_reported_once(self):
+        """嵌套 tis.* 违规恰一条：前置全量推断已记录，槽位二次推断
+        不重放（路由层按调用节点缓存结果——同节点检查只发生一次）。"""
+        params = _PARAMS + ", i8r: Tensor[i8, (64,), Register]"
+        rs = _run(_stmt("r = tis.maximum(tis.exp(i8r), sR)"), params=params)
+        assert [r.code for r in rs] == ["E0408"]
+        assert rs[0].category == "dtype-float"
+
     def test_auto_repeated_compilation_identical(self):
         """Auto 选择确定性：同输入同目标重复编译逐条一致（含拒绝面）。"""
         params = (_PARAMS + ", a17: Tensor[f16, (17, 16), Shared],"

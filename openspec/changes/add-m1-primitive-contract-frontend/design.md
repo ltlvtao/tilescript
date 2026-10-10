@@ -101,6 +101,7 @@ residual（登记，非本 change 缺陷）：
 6. dot/reduce 的 `Auto` 选择已确定（第一项），但其诊断呈现（compute 段字段）归 diagnostics——拒绝清单路径下选择只影响 E0403 的整除检查输入，无可见输出差异。
 7. `E0407` 值位置封闭集外（`If`/`While` 条件等）为 spec undefined，M1 不裁（D6 收窄；后续补洞 change 裁决）。
 8. `E0403` 整除在 comptime 符号维（无数值）下不可判定 → 不触发（D5 裁决的既定读法，非缺陷——compute-ops R2 Scenario 2 隐含）。
+9. `import tis as t` 别名绑定为 syntax spec undefined：单独使用即被 E0103/E0102 拒（装饰器名不在识别集，无法定义设备函数）；双 import（`import tis` + `import tis as t`）下 `t.*` 调用绕过三段的字面 `tis` 匹配（类型段与原语段同此空白）。M1 三段均按字面 `tis` 识别、别名调用全部让渡；修复需 syntax 接受集裁决（拒别名 import）或 import 绑定信息跨段传递，归后续 change（代码审查 cycle 1 finding 3）。
 
 ## 长期基线刷新计划（归档时执行）
 

@@ -125,6 +125,22 @@ class TestAllocAndView:
         assert rs[0].category == "layout-value"
         assert "非负" in rs[0].suggestion and "comptime" in rs[0].suggestion
 
+    def test_runtime_int_xor_rejected(self):
+        """xor=运行期 int 名（n）→ E0406：值非静态可知，comptime 判定
+        区分运行期名与 comptime[int] 名。"""
+        rs = _run(_stmt(
+            "tis.alloc_shared((BR, 64), f16, layout=tis.Layout.swizzled(xor=n))"
+        ))
+        assert [r.code for r in rs] == ["E0406"]
+        assert rs[0].category == "layout-value"
+        assert "comptime" in rs[0].suggestion
+
+    def test_comptime_name_xor_accepted(self):
+        """xor=comptime[int] 名（BR）→ 让渡为接受面（约束域在名上）。"""
+        assert _run(_stmt(
+            "tis.alloc_shared((BR, 64), f16, layout=tis.Layout.swizzled(xor=BR))"
+        )) == []
+
     def test_alloc_shared_dtype_and_layout_domain(self):
         """dtype 六封闭集外与 layout 集合外值 → E0406。"""
         rs = _run(_stmt("tis.alloc_shared((64,), f64)"))

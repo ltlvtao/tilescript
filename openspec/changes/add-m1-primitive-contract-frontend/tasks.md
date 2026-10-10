@@ -5,7 +5,7 @@
 ## 1. HAL 能力描述加载（hal/capability-descriptions 实现面）
 
 - [x] 1.1 `tilescript/hal.py` 扩展：两目标冻结常量（`mma_shapes`/`reduce_scopes` 含登记顺序）、`Auto` 选择（列表第一项）、小写 `warp`/`block` ↔ 语言值映射、`E0402` 报告面文本——测试断言登记值与 hal spec 逐字段一致（hal R「字段集」两目标 Scenario + 「列表顺序即优先序」3S）——验证：`tests/test_hal.py` 8 passed（登记值/Auto/映射/报告面文本）
-- [x] 1.2 `pipeline.compile_stages` 签名扩展（`*, target` 必选关键字）与 `cli` 透传——既有测试联动（`--target` 行为零变化，R1/R2 不动）——验证：`.venv/bin/python -m pytest -q` → 197 passed（189 既有 + 8 HAL；16 处测试调用点补 `target="nvidia_h200"`，`--target` 行为零变化）
+- [x] 1.2 `pipeline.compile_stages` 签名扩展（`*, target` 必选关键字）与 `cli` 透传——既有测试联动（`--target` 行为零变化，R1/R2 不动）——验证：`.venv/bin/python -m pytest -q` → 197 passed（189 既有 + 8 HAL；15 处测试调用点补 `target="nvidia_h200"`，`--target` 行为零变化）
 
 ## 2. 基座：折叠与结果类型
 

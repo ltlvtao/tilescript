@@ -53,7 +53,8 @@ _UNCARRIED_CELLS = {("Shared", "Shared"): "copy", ("Register", "Register"): "mov
 class MemoryOpsChecker:
     """tis.* 存取原语检查器（traverse 改道回调；rejections 侧收集）。"""
 
-    def __init__(self):
+    def __init__(self, comptime: "frozenset[str]" = frozenset()):
+        self.comptime = comptime  # kernel comptime[int] 名集（R5 值域判定输入）
         self.rejections: "list[Rejection]" = []
         self.hit_calls: "set[int]" = set()  # 已产生拒绝的调用节点（E0407 协调）
 
@@ -391,7 +392,7 @@ def _layout_ok(node, checker, call_node) -> bool:
         for kw in node.keywords:
             if kw.arg == "xor":
                 xor = kw.value
-        if xor is not None and _comptime_nonneg(xor):
+        if xor is not None and _comptime_nonneg(xor, checker.comptime):
             return True
         checker._reject(call_node, "layout-value",
                         "swizzled 的 xor 必须为非负 comptime[int]。")
@@ -402,12 +403,14 @@ def _layout_ok(node, checker, call_node) -> bool:
     return False
 
 
-def _comptime_nonneg(node) -> bool:
-    """xor 实参：非负 int 字面量（可带一元负判定为负即违规）或 comptime 名。"""
+def _comptime_nonneg(node, comptime) -> bool:
+    """xor 实参：非负 int 字面量（可带一元负判定为负即违规）或
+    comptime[int] 名（值约束域在名上，让渡为接受面）；运行期 int 名
+    值非静态可知 → 违规。"""
     if isinstance(node, ast.Constant) and type(node.value) is int:
         return node.value >= 0
     if isinstance(node, ast.Name):
-        return True  # comptime 名（kernel comptime 集）让渡为接受面
+        return node.id in comptime
     return False
 
 
