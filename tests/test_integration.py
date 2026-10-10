@@ -1,12 +1,16 @@
-"""集成样例（tasks 6.1）：veps §7 FlashAttention 源码的语法段实例化。
+"""集成样例：veps §7 FlashAttention 源码的两段实例化（syntax + type-system）。
 
-syntax spec Scenario L100（白名单语句组合被接受）引用 veps/design.md §7；
-该源码以源文件本身为模块——`module flash_attention:` 行是文档组织伪代码，
-按 E0101 拒绝，集成样例须去除（tasks 6.1）。
+syntax spec Scenario L100 引用 veps/design.md §7；该源码以源文件本身为
+模块——`module flash_attention:` 行是文档组织伪代码，按 E0101 拒绝，集成
+样例须去除（上一 change tasks 6.1）。本 change（tasks 8.1/8.2）：类型段
+已知面（签名注解、状态字段、st.* 字段访问、构造与 return 绑定）等价、
+让渡面（tis.*/算术/pipe.run）UNKNOWN 跳过——两段零拒绝；已知面注入
+E0303 走 CLI rejected。
 """
 
 import json
 
+from tilescript import pipeline
 from tilescript.cli import main
 from tilescript.frontend import check_module
 
@@ -108,3 +112,74 @@ class TestInjection:
         assert [r["code"] for r in payload["rejections"]] == ["E0105", "E0106"]
         assert payload["rejections"][0]["category"] == "while-loop"
         assert payload["rejections"][1]["category"] == "list-comprehension"
+
+
+class TestFlashAttentionBothStages:
+    def test_both_stages_zero_rejections(self):
+        """两段（syntax + type-system）零拒绝：已知面等价、让渡面 UNKNOWN。"""
+        assert pipeline.compile_stages(FLASH_ATTENTION) == []
+
+    def test_known_face_equivalent_no_rejection(self):
+        """已知面收紧回归：构造实参与字段声明同型（st.m/st.l 直传）不报。"""
+        source = FLASH_ATTENTION.replace(
+            "        return AttnState(O_acc=O_new, m=m_new, l=l_new)",
+            "        return AttnState(O_acc=O_new, m=st.m, l=st.l)",
+        )
+        assert pipeline.compile_stages(source) == []
+
+    def test_cli_end_to_end_incomplete_two_stages(self, tmp_path, capsys):
+        """CLI 端到端：exit 0 + incomplete 两段清单。"""
+        src = tmp_path / "flash.tis"
+        src.write_text(FLASH_ATTENTION, encoding="utf-8")
+        capsys.readouterr()
+        code = main(["compile", str(src), "--target", "nvidia_h200"])
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert payload["status"] == "incomplete"
+        assert payload["implemented_stages"] == ["syntax", "type-system"]
+        assert set(payload["pending_stages"]) == {
+            "primitive-contract", "execution-structure", "numerics"}
+
+    def test_nested_consume_return_binding_checked(self):
+        """嵌套 consume 体在检查面内：return 值类型×返回注解可违规。"""
+        source = FLASH_ATTENTION.replace(
+            "        return AttnState(O_acc=O_new, m=m_new, l=l_new)",
+            "        return 5",
+        )
+        rs = pipeline.compile_stages(source)
+        assert [r.code for r in rs] == ["E0303"]
+        assert rs[0].category == "return"
+
+    def test_relinquished_face_negative_regression(self):
+        """让渡面负例：zeros 后绑 int、UNKNOWN 边界切片不报（tasks 8.2）。"""
+        source = FLASH_ATTENTION.replace(
+            "    bm = tis.block_idx(0)\n",
+            "    x = tis.zeros((16,), f32, Register)\n"
+            "    x = 5\n"
+            "    y = Q[x : x + 16]\n",
+        )
+        assert pipeline.compile_stages(source) == []
+
+
+class TestKnownFaceE0303ThroughCli:
+    def test_ctor_dtype_mismatch_rejected_via_cli(self, tmp_path, capsys):
+        """注入已知面 E0303（构造字段 dtype 不匹配）→ rejected JSON + exit 1。"""
+        source = FLASH_ATTENTION.replace(
+            "    seq_len: int, scale: f32,",
+            "    seq_len: int, scale: f32, P_r: Tensor[f16, (BR,), Register],",
+        ).replace(
+            "        return AttnState(O_acc=O_new, m=m_new, l=l_new)",
+            "        return AttnState(O_acc=O_new, m=P_r, l=l_new)",
+        )
+        src = tmp_path / "dtype.tis"
+        src.write_text(source, encoding="utf-8")
+        capsys.readouterr()
+        code = main(["compile", str(src), "--target", "nvidia_h200"])
+        out = capsys.readouterr().out
+        assert code == 1
+        payload = json.loads(out)
+        assert payload["status"] == "rejected"
+        assert [r["code"] for r in payload["rejections"]] == ["E0303"]
+        r = payload["rejections"][0]
+        assert r["category"] == "state-ctor-arg" and "tis.cast" in r["suggestion"]
+        assert set(r.keys()) == {"code", "line", "col", "category", "suggestion"}

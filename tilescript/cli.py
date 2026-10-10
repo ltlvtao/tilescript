@@ -11,7 +11,7 @@ import json
 import pathlib
 import sys
 
-from . import frontend, hal
+from . import hal, pipeline
 
 
 def main(argv: "list[str] | None" = None) -> int:
@@ -36,8 +36,8 @@ def main(argv: "list[str] | None" = None) -> int:
         print(f"拒绝：源文件不可读：{args.source}", file=sys.stderr)
         return 2
 
-    # 语法段（五段管线的第一段；其余段由后续 change 实现，诚实列出）。
-    rejections = frontend.check_module(source_text)
+    # 已实现检查段（syntax + type-system；其余段由后续 change 实现，诚实列出）。
+    rejections = pipeline.compile_stages(source_text)
     if rejections:
         payload = {
             "status": "rejected",
@@ -48,8 +48,9 @@ def main(argv: "list[str] | None" = None) -> int:
 
     payload = {
         "status": "incomplete",
-        "implemented_stages": [frontend.STAGE_NAME],
-        "pending_stages": [s for s in frontend.ALL_STAGES if s != frontend.STAGE_NAME],
+        "implemented_stages": list(pipeline.IMPLEMENTED_STAGES),
+        "pending_stages": [s for s in pipeline.ALL_STAGES
+                           if s not in pipeline.IMPLEMENTED_STAGES],
     }
     print(json.dumps(payload, ensure_ascii=False))
     return 0

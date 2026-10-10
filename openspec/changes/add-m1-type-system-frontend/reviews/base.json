@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "changeId": "add-m1-type-system-frontend",
+  "baseSha": "e8eb812bb7e7ee971835b66d12daf11d30449143",
+  "note": "M1 第二检查段：type-system E03xx 实现面 + R8 段间执行语义补洞（唯一 delta）"
+}
