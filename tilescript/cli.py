@@ -3,7 +3,9 @@
 退出码封闭三值（R1/R2/R3）：
 - 2 工具链入口拒绝（不触源文件、非 E0xxx）；
 - 1 已实现检查段存在拒绝；
-- 0 已实现段零命中（诚实 incomplete——pending 非空期间 MUST NOT 宣称完成）。
+- 0 已实现段零命中——全部段已实现（pending 空）输出 passed 最小形态
+  （单字段 status="passed"）；任一段未实现的过渡期输出诚实 incomplete
+  （MUST NOT 宣称超出已实现范围的完成）。
 """
 
 import argparse
@@ -36,8 +38,8 @@ def main(argv: "list[str] | None" = None) -> int:
         print(f"拒绝：源文件不可读：{args.source}", file=sys.stderr)
         return 2
 
-    # 已实现检查段（syntax/type-system/primitive-contract；其余段由后续
-    # change 实现，诚实列出）。target 透传 pipeline（HAL 依赖检查输入）。
+    # 已实现检查段（M1 五段全实现：syntax/type-system/primitive-contract/
+    # execution-structure/numerics）。target 透传 pipeline（HAL 依赖检查输入）。
     rejections = pipeline.compile_stages(source_text, target=args.target)
     if rejections:
         payload = {
@@ -47,12 +49,16 @@ def main(argv: "list[str] | None" = None) -> int:
         print(json.dumps(payload, ensure_ascii=False))
         return 1
 
-    payload = {
-        "status": "incomplete",
-        "implemented_stages": list(pipeline.IMPLEMENTED_STAGES),
-        "pending_stages": [s for s in pipeline.ALL_STAGES
-                           if s not in pipeline.IMPLEMENTED_STAGES],
-    }
+    pending = [s for s in pipeline.ALL_STAGES
+               if s not in pipeline.IMPLEMENTED_STAGES]
+    if pending:
+        payload = {
+            "status": "incomplete",
+            "implemented_stages": list(pipeline.IMPLEMENTED_STAGES),
+            "pending_stages": pending,
+        }
+    else:
+        payload = {"status": "passed"}  # passed 最小形态（R3——单字段冻结）
     print(json.dumps(payload, ensure_ascii=False))
     return 0
 

@@ -137,11 +137,11 @@ class TestPrimitiveStageWiring:
         # 原语段（E0404，同 _PRIMITIVE_BROKEN）
         # 类型段（E0303，同 _TYPED_BROKEN）——上面两测已分别固定。
 
-    def test_implemented_stages_four(self):
-        """toolchain/cli R3 段清单唯一来源：四段登记（9.2 第四段接入）。"""
+    def test_implemented_stages_five(self):
+        """toolchain/cli R3 段清单唯一来源：五段登记（本 change 第五段接入）。"""
         assert pipeline.IMPLEMENTED_STAGES == (
             "syntax", "type-system", "primitive-contract",
-            "execution-structure")
+            "execution-structure", "numerics")
 
 
 # ---- 9.2 第四段接入（execution-structure）：接入 + 短路 + 报告契约（delta R 5S）----
@@ -282,3 +282,144 @@ class TestExecutionReportContract:
         a = pipeline.compile_stages(self._TWO_HITS, target="nvidia_h200")
         b = pipeline.compile_stages(self._TWO_HITS, target="nvidia_h200")
         assert [r.to_dict() for r in a] == [r.to_dict() for r in b]
+
+
+# ---- 第五段接入（numerics）：接入 + 短路（delta 新 Scenario）----------------
+
+_NUM_FLASH = (
+    "import tis\n"
+    "\n"
+    "@tis.state\n"
+    "class AttnState:\n"
+    "    O_acc: Tensor[f32, (BR, D), Register]\n"
+    "\n"
+    "@tis.kernel\n"
+    "def flash(K_ptr: Pointer[f16, Global], seq_len: int, scale: f32,\n"
+    "          D: comptime[int] = 64, BR: comptime[int] = 64,\n"
+    "          BC: comptime[int] = 64, STAGES: comptime[int] = 2):\n"
+    "    K = tis.make_tensor(K_ptr, (seq_len, D))\n"
+    "    K_s = tis.alloc_shared((BC, D), f16)\n"
+    "    S = tis.zeros((BR, D), f32, Register)\n"
+    "    T = S * scale\n"
+    "    steps = tis.cdiv(seq_len, BC)\n"
+    "    base = BR * 2 - 1\n"
+    "    if seq_len > 0:\n"
+    "        T = T + S\n"
+    "    pipe = tis.Pipeline(stages=STAGES, buffers={\"K\": K_s})\n"
+    "\n"
+    "    @pipe.produce\n"
+    "    def fetch(j: int, buf):\n"
+    "        tis.load(K[j * BC:(j + 1) * BC, :], buf.K, mode=Async)\n"
+    "\n"
+    "    @pipe.consume\n"
+    "    def attend(j: int, buf, st: AttnState) -> AttnState:\n"
+    "        return AttnState(O_acc=tis.zeros((BR, D), f32, Register))\n"
+    "\n"
+    "    st = pipe.run(range(tis.cdiv(seq_len, BC)),\n"
+    "                  init=AttnState(O_acc=tis.zeros((BR, D), f32, Register)))\n"
+    "    return\n"
+)
+
+_NUM_BROKEN = (
+    "import tis\n"
+    "\n"
+    "@tis.kernel\n"
+    "def f(seq_len: int, scale: f32, D: comptime[int] = 64,\n"
+    "      BR: comptime[int] = 64, BC: comptime[int] = 64):\n"
+    "    A = tis.zeros((4,), f16, Register)\n"
+    "    B = tis.zeros((4,), f32, Register)\n"
+    "    C = A + B\n"          # E0602（四段干净 → 数值段上报）
+    "    return\n"
+)
+
+_EXEC_BROKEN = (
+    "import tis\n"
+    "\n"
+    "@tis.state\n"
+    "class AttnState:\n"
+    "    O_acc: Tensor[f32, (BR, D), Register]\n"
+    "\n"
+    "@tis.kernel\n"
+    "def flash(K_ptr: Pointer[f16, Global], seq_len: int, scale: f32,\n"
+    "          D: comptime[int] = 64, BR: comptime[int] = 64,\n"
+    "          STAGES: comptime[int] = 2):\n"
+    "    K_s = tis.alloc_shared((BR, D), f16)\n"
+    "    pipe = tis.Pipeline(stages=STAGES, buffers={\"K\": K_s})\n"
+    "    pipe2 = tis.Pipeline(stages=STAGES, buffers={\"K\": K_s})\n"  # E0502
+    "    T = K_s * 0.5\n"     # 数值面表达式（短路下数值段不执行）
+    "    return\n"
+)
+
+
+class TestNumericsStageIntegration:
+    """tasks 6.2：第五段接入面（段清单/合法源零拒绝/E06xx 管线上报）。"""
+
+    def test_clean_flash_numerics_five_stages_zero(self):
+        """合法 FLASH 数值面五段零拒绝。"""
+        assert pipeline.compile_stages(_NUM_FLASH, target="nvidia_h200") == []
+
+    def test_e0602_reaches_pipeline_report(self):
+        """四段干净 → E0602 经管线上报（stage=numerics）。"""
+        rs = pipeline.compile_stages(_NUM_BROKEN, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0602"]
+        assert rs[0].stage == "numerics"
+
+    def test_numerics_target_independent(self):
+        """E06xx 无目标分化：两登记目标输出逐条一致（check_module 无 target）。"""
+        h200 = [r.to_dict() for r in pipeline.compile_stages(_NUM_BROKEN,
+                                                             target="nvidia_h200")]
+        ascend = [r.to_dict() for r in pipeline.compile_stages(_NUM_BROKEN,
+                                                               target="ascend_910b")]
+        assert h200 == ascend
+
+
+class TestNumericsShortCircuit:
+    """delta 新 Scenario：前序段任一非空即数值段 MUST NOT 执行。"""
+
+    def test_execution_rejection_suppresses_numerics(self):
+        """E0502 在 → 数值面不执行（无任何 E06xx 出现）。"""
+        rs = pipeline.compile_stages(_EXEC_BROKEN, target="nvidia_h200")
+        assert rs and all(r.code == "E0502" for r in rs)
+        assert not any(r.code.startswith("E06") for r in rs)
+
+    def test_type_rejection_suppresses_numerics(self):
+        """类型段非空同样短路（E0303 在 → 潜在 E0602 不出现）。"""
+        source = (
+            "import tis\n"
+            "\n"
+            "@tis.kernel\n"
+            "def f(gl: Tensor[f16, (4,), Global], b: Tensor[f32, (4,), Register],\n"
+            "      D: comptime[int] = 64, BR: comptime[int] = 64,\n"
+            "      BC: comptime[int] = 64):\n"
+            "    b = gl\n"       # E0303：f16 形参值绑 f32 注解目标（类型段）
+            "    C = gl + b\n"   # 若数值段执行将报 E0602（f16+f32）
+            "    return\n"
+        )
+        rs = pipeline.compile_stages(source, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0303"]
+        assert not any(r.code.startswith("E06") for r in rs)
+
+
+class TestNumericsReportContract:
+    """tasks 6.1 管线面：择一双命中经管线只报最早段（R7 Scenario 2）。"""
+
+    _DOUBLE_HIT = (
+        "import tis\n"
+        "\n"
+        "@tis.kernel\n"
+        "def f(seq_len: int, scale: f32, D: comptime[int] = 64,\n"
+        "      BR: comptime[int] = 64, BC: comptime[int] = 64):\n"
+        "    b = tis.full((4,), 1.5, f16, Register)\n"
+        "    b0 = b[0]\n"
+        "    x = seq_len\n"
+        "    x = scale * b0\n"   # 数值段双命中（E0602+E0303）→ 择一恰一条 E0303
+        "    return\n"
+    )
+
+    def test_double_hit_earliest_stage_through_pipeline(self):
+        """前四段干净 → 数值段择一收口：清单恰一条 E0303（stage 口径随
+        最早段 type-system，无 E06xx 同现）。"""
+        rs = pipeline.compile_stages(self._DOUBLE_HIT, target="nvidia_h200")
+        assert [r.code for r in rs] == ["E0303"]
+        assert rs[0].stage == "type-system"
+        assert not any(r.code.startswith("E06") for r in rs)

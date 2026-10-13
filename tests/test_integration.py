@@ -1,11 +1,11 @@
-"""集成样例：veps §7 FlashAttention 源码的两段实例化（syntax + type-system）。
+"""集成样例：veps §7 FlashAttention 源码的五段实例化（M1 全链）。
 
 syntax spec Scenario L100 引用 veps/design.md §7；该源码以源文件本身为
 模块——`module flash_attention:` 行是文档组织伪代码，按 E0101 拒绝，集成
-样例须去除（上一 change tasks 6.1）。本 change（tasks 8.1/8.2）：类型段
-已知面（签名注解、状态字段、st.* 字段访问、构造与 return 绑定）等价、
-让渡面（tis.*/算术/pipe.run）UNKNOWN 跳过——两段零拒绝；已知面注入
-E0303 走 CLI rejected。
+样例须去除。本 change（tasks 7.2）：数值段接入后全链算术/比较/常量面
+（S*scale、st.m-m_new、alpha 派生链、O_acc/l 除法、full -inf、cdiv）五段
+零拒绝 → CLI passed；E06xx 注入面走 rejected；两目标语言层一致
+（check_module 无 target——E06xx 无目标分化）。
 """
 
 import json
@@ -114,11 +114,11 @@ class TestInjection:
         assert payload["rejections"][1]["category"] == "list-comprehension"
 
 
-class TestFlashAttentionFourStages:
-    def test_four_stages_zero_rejections(self):
-        """四段零拒绝（10.1）：前三段既有面 + 执行结构段全套合法——Pipeline
-        构造/produce/consume/run、cdiv/range/block_idx、buf.K/V 注册键、
-        st.*/pipe.run/算术让渡链维持。"""
+class TestFlashAttentionFiveStages:
+    def test_five_stages_zero_rejections(self):
+        """五段零拒绝（本 change）：前三段既有面 + 执行结构段全套合法 +
+        数值段全链（S*scale、m_new 派生、alpha 逐元素、O_acc/l 除法、
+        full -inf 定 f32、cdiv 折叠、cast 派生算术）零命中。"""
         assert pipeline.compile_stages(FLASH_ATTENTION, target="nvidia_h200") == []
 
     def test_dot_known_face_comptime_dims(self):
@@ -140,19 +140,15 @@ class TestFlashAttentionFourStages:
         )
         assert pipeline.compile_stages(source, target="nvidia_h200") == []
 
-    def test_cli_end_to_end_incomplete_four_stages(self, tmp_path, capsys):
-        """CLI 端到端：exit 0 + incomplete 四段清单（执行结构段接入后）。"""
+    def test_cli_end_to_end_passed_five_stages(self, tmp_path, capsys):
+        """CLI 端到端（本 change 联动翻转）：exit 0 + passed 最小形态。"""
         src = tmp_path / "flash.tis"
         src.write_text(FLASH_ATTENTION, encoding="utf-8")
         capsys.readouterr()
         code = main(["compile", str(src), "--target", "nvidia_h200"])
         payload = json.loads(capsys.readouterr().out)
         assert code == 0
-        assert payload["status"] == "incomplete"
-        assert payload["implemented_stages"] == [
-            "syntax", "type-system", "primitive-contract",
-            "execution-structure"]
-        assert set(payload["pending_stages"]) == {"numerics"}
+        assert payload == {"status": "passed"}
 
     def test_nested_consume_return_binding_checked(self):
         """嵌套 consume 体在检查面内：return 值类型×返回注解可违规。"""
@@ -197,6 +193,40 @@ class TestKnownFaceE0303ThroughCli:
         r = payload["rejections"][0]
         assert r["category"] == "state-ctor-arg" and "tis.cast" in r["suggestion"]
         assert set(r.keys()) == {"code", "line", "col", "category", "suggestion"}
+
+
+class TestNumericsInjection:
+    """tasks 7.2：E06xx 注入面（FLASH 全合法面基础上注入数值违规）。"""
+
+    def test_injected_e0602_rejected_via_cli(self, tmp_path, capsys):
+        """注入跨 dtype 算术（kernel 体独立语句 Q_s f16 × scale f32）→
+        rejected 恰一条 E0602。"""
+        source = FLASH_ATTENTION.replace(
+            "    tis.barrier()\n",
+            "    tis.barrier()\n    junk = Q_s * scale\n",
+        )
+        src = tmp_path / "numerics.tis"
+        src.write_text(source, encoding="utf-8")
+        capsys.readouterr()
+        code = main(["compile", str(src), "--target", "nvidia_h200"])
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 1
+        assert payload["status"] == "rejected"
+        assert [r["code"] for r in payload["rejections"]] == ["E0602"]
+        assert payload["rejections"][0]["category"] == "cross-dtype-arith"
+
+    def test_e06xx_identical_across_targets(self):
+        """E06xx 无目标分化：同源两登记目标语言层输出逐条一致（含建议
+        文本）——check_module(tree) 无 target 的行为注记。"""
+        source = FLASH_ATTENTION.replace(
+            "    tis.barrier()\n",
+            "    tis.barrier()\n    junk = Q_s * scale\n",
+        )
+        h200 = pipeline.compile_stages(source, target="nvidia_h200")
+        ascend = pipeline.compile_stages(source, target="ascend_910b")
+        assert [r.to_dict() for r in h200] == [r.to_dict() for r in ascend]
+        assert [r.code for r in h200] == ["E0602"]
+        assert all(r.stage == "numerics" for r in h200)
 
 
 class TestCrossTargetConsistency:

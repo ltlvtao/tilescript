@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "changeId": "add-m1-numerics-frontend", "baseSha": "a047c33", "note": "M1 第五检查段（最后一段）：numerics/value-semantics E06xx 实现面 + pipeline 第五段接入 + toolchain/cli passed 联动" }

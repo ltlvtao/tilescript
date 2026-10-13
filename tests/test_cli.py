@@ -1,7 +1,8 @@
-"""toolchain/cli 行为测试（R1×5S、R2×3S、R3×2S——change specs/toolchain/cli）。
+"""toolchain/cli 行为测试（R1×5S、R2×3S、R3 5S——change specs/toolchain/cli）。
 
 直接调用 main(argv) 断言退出码/stdout/stderr；另以子进程覆盖
-`python -m tilescript` 入口形态（Scenario 的字面命令形态）。
+`python -m tilescript` 入口形态（Scenario 的字面命令形态）。本 change 后
+五段全实现：零命中 → passed 最小形态（单字段），拒绝优先不变。
 """
 
 import json
@@ -48,6 +49,16 @@ INVALID_KERNEL = (
     "    x = [i for i in row]\n"  # L7：E0106
 )
 
+# 数值段拒绝面（E0606：float 字面量裸绑定）。
+NUMERICS_INVALID_KERNEL = (
+    "import tis\n"
+    "\n"
+    "@tis.kernel\n"
+    "def k(src: Pointer[f16, Global], n: int):\n"
+    "    x = 1.5\n"               # E0606
+    "    return\n"
+)
+
 
 class TestR1Entrance:
     def test_missing_target_rejected(self, tmp_path, capsys):
@@ -91,7 +102,7 @@ class TestR1Entrance:
         src = _write(tmp_path, "kernel.py", VALID_KERNEL)
         code, out, err = _run(["compile", src, "--target", "nvidia_h200"], capsys)
         assert code == 0
-        assert json.loads(out)["status"] == "incomplete"
+        assert json.loads(out)["status"] == "passed"
 
 
 class TestR2Serialization:
@@ -128,25 +139,59 @@ class TestR2Serialization:
 
 
 class TestR3HonestExit:
-    def test_syntax_pass_incomplete_exit0(self, tmp_path, capsys):
-        """Scenario：已实现段（四段）零命中 → incomplete + 段清单 + exit 0。"""
+    """R3 delta：五段全实现后的 passed 最小形态 + 过渡期 incomplete 分支。"""
+
+    def test_five_stages_zero_hit_passed_minimal(self, tmp_path, capsys):
+        """Scenario：合法模块（五段零命中）→ 恰 {"status": "passed"} 单字段、
+        exit 0（MUST NOT 出现 implemented/pending 段清单字段）。"""
+        src = _write(tmp_path, "kernel.tis", VALID_KERNEL)
+        code, out, err = _run(["compile", src, "--target", "nvidia_h200"], capsys)
+        assert code == 0
+        payload = json.loads(out)
+        assert payload == {"status": "passed"}
+
+    def test_passed_repeat_byte_identical(self, tmp_path, capsys):
+        """Scenario：passed 输出同输入重复运行 stdout 逐字节一致。"""
+        src = _write(tmp_path, "kernel.tis", VALID_KERNEL)
+        _, out1, _ = _run(["compile", src, "--target", "nvidia_h200"], capsys)
+        _, out2, _ = _run(["compile", src, "--target", "nvidia_h200"], capsys)
+        assert out1 == out2 and json.loads(out1)["status"] == "passed"
+
+    def test_rejection_precedes_passed(self, tmp_path, capsys):
+        """Scenario：五段全实现下存在拒绝（E0606）→ rejected + exit 1，
+        MUST NOT 因五段全实现而输出 passed。"""
+        src = _write(tmp_path, "kernel.tis", NUMERICS_INVALID_KERNEL)
+        code, out, err = _run(["compile", src, "--target", "nvidia_h200"], capsys)
+        assert code == 1
+        payload = json.loads(out)
+        assert payload["status"] == "rejected"
+        assert payload["rejections"][0]["code"] == "E0606"
+
+    def test_incomplete_when_pending_stages_nonempty(self, tmp_path, capsys,
+                                                     monkeypatch):
+        """Scenario：passed 在五段全实现前不可达——过渡期（pending 非空，
+        经 monkeypatch 模拟未来新增段）零命中 → incomplete 列段清单、
+        exit 0、MUST NOT 输出 passed。"""
+        from tilescript import pipeline
+        monkeypatch.setattr(
+            pipeline, "IMPLEMENTED_STAGES",
+            ("syntax", "type-system", "primitive-contract",
+             "execution-structure"))
         src = _write(tmp_path, "kernel.tis", VALID_KERNEL)
         code, out, err = _run(["compile", src, "--target", "nvidia_h200"], capsys)
         assert code == 0
         payload = json.loads(out)
         assert payload["status"] == "incomplete"
-        assert payload["implemented_stages"] == [
-            "syntax", "type-system", "primitive-contract",
-            "execution-structure"]
-        assert set(payload["pending_stages"]) == {"numerics"}
+        assert payload["pending_stages"] == ["numerics"]
 
-    def test_status_values_only_rejected_or_incomplete(self, tmp_path, capsys):
-        """Scenario：passed 不可达——本 change 全部输出路径的 status 封闭二值。"""
+    def test_status_values_passed_or_rejected(self, tmp_path, capsys):
+        """本 change 全部真实输出路径的 status 封闭二值（passed/rejected；
+        incomplete 为过渡期分支，上一例独立覆盖）。"""
         src_ok = _write(tmp_path, "ok.tis", VALID_KERNEL)
         src_bad = _write(tmp_path, "bad.tis", INVALID_KERNEL)
         _, out_ok, _ = _run(["compile", src_ok, "--target", "nvidia_h200"], capsys)
         _, out_bad, _ = _run(["compile", src_bad, "--target", "nvidia_h200"], capsys)
-        assert json.loads(out_ok)["status"] == "incomplete"
+        assert json.loads(out_ok)["status"] == "passed"
         assert json.loads(out_bad)["status"] == "rejected"
 
 
@@ -161,7 +206,7 @@ class TestSubprocessEntry:
         )
         if target_flag:
             assert proc.returncode == 0
-            assert json.loads(proc.stdout)["status"] == "incomplete"
+            assert json.loads(proc.stdout)["status"] == "passed"
         else:
             assert proc.returncode == 2
             assert "nvidia_h200" in proc.stderr
