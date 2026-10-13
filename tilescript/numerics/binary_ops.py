@@ -1,21 +1,25 @@
 """算术与比较/逻辑裁决（R1 算术操作数与结果 / R3 比较逻辑与布尔封闭）。
 
-判定序（design D4；同节点多码只报段内序首个——首个命中即止）：
+判定序（design D4 + stable spec R2/R4 待定型语境条款；同节点多码只报段内
+序首个——首个命中即止）：
 1. 布尔操作数 → E0605（算术操作数位不在布尔封闭集）；
 2. 一侧 int 家族、一侧 dtype 家族 → E0601（int 字面量/comptime 常量不
-   豁免）；一侧 int 家族一侧待定型 → E0601（无 dtype 语境不可定型）；
-3. 两侧 dtype 家族 dtype 不同 → E0602；
-4. `/`：int 家族或整型 dtype → E0604；
-5. Tensor scope 不同 → E0603（报两侧 scope）；
-6. Tensor shape 逐维广播不兼容 → E0603（报两侧 shape）；
-7. 一侧 UNKNOWN → 全部让渡（结果 UNKNOWN）。
+   豁免）；
+3. 待定型常量 × int 家族或整型 dtype（i8/i32）→ E0606（R2/R4——待定型
+   常量只在浮点 dtype 语境合法；inf 在 int 家族/整型位置无穷无整数
+   表示）；待定型 inf × f8e4m3 → E0606（E4M3 无无穷表示）；
+4. 两侧 dtype 家族 dtype 不同 → E0602；
+5. `/`：int 家族或整型 dtype → E0604；
+6. Tensor scope 不同 → E0603（报两侧 scope）；
+7. Tensor shape 逐维广播不兼容 → E0603（报两侧 shape）；
+8. 一侧 UNKNOWN → 全部让渡（结果 UNKNOWN）。
 
 结果派生：int 家族 `+ - *` 全 comptime → COMPTIME_INT（值按 R5 折叠记入
 侧表），否则 int；dtype 不变；标量⊗Tensor → 该 Tensor shape/scope；
-Tensor⊗Tensor → 广播 shape 同 scope；待定型⊗dtype 家族 → 按该侧定型
-（R4 位置②）。违规时结果类型按类别近似（混家族取 dtype 家族侧——外层
-组合继续判定，同级其余 int 操作数可继续列出，R7 同码合并；跨 dtype/
-scope/shape 取左操作数），供再绑定等价与后续组合推断消费。
+Tensor⊗Tensor → 广播 shape 同 scope；待定型⊗浮点 dtype 家族 → 按该侧
+定型（R4 位置②）。违规时结果类型按类别近似（混家族取 dtype 家族侧——
+外层组合继续判定，同级其余 int 操作数可继续列出，R7 同码合并；跨
+dtype/scope/shape 取左操作数），供再绑定等价与后续组合推断消费。
 
 广播维相等判定 = `primitives.fold` 多项式等价（两维 fold 相等 ⇔ 维长
 等价——ConstDim(64) 与 32*2 不误报）；相等保留取左维、一侧 1 扩展取
@@ -76,7 +80,7 @@ def arith_operands(left_node, right_node, op, report_node, inc):
     if lf == "unknown" or rf == "unknown":
         return UNKNOWN
 
-    # 2. 混家族 / int×待定型。
+    # 2. 混家族（int × dtype 家族）。
     if {lf, rf} == {"int", "dtype"}:
         int_node = left_node if lf == "int" else right_node
         dtype_t = right if rf == "dtype" else left
@@ -86,12 +90,13 @@ def arith_operands(left_node, right_node, op, report_node, inc):
                 "按另一侧 dtype 定型")
         inc.report("E0601", _node_of(int_node, report_node), note)
         return dtype_t  # 近似取 dtype 家族侧（R7 同码合并承载）
+
+    # 3. 待定型 × int 家族（R2/R4：待定型常量只在浮点 dtype 语境合法）。
     if {lf, rf} == {"int", "pending"}:
-        int_node = left_node if lf == "int" else right_node
-        inc.report("E0601", _node_of(int_node, report_node),
-                   "混家族算术：int 家族值与待定型浮点常量（float 字面量/"
-                   "inf）无 dtype 语境不可定型；与已定型 dtype 家族值运算后"
-                   "按该 dtype 定型，或经 tis.full 显式构造")
+        pend_node = left_node if lf == "pending" else right_node
+        pend = left if lf == "pending" else right
+        inc.report("E0606", _node_of(pend_node, report_node),
+                   _pending_context_note(pend, "int 家族位置"))
         return UNKNOWN
 
     # int 家族 ⊗ int 家族：全 comptime 折叠（R5），`/` 拒（E0604）。
@@ -109,9 +114,23 @@ def arith_operands(left_node, right_node, op, report_node, inc):
     if lf == "pending" and rf == "pending":
         return UNKNOWN
 
-    # 待定型 ⊗ dtype 家族：按该侧定型（R4 位置②合法）。
+    # 待定型 ⊗ dtype 家族（R4 位置②）：语境裁决——整型 dtype / inf×f8e4m3
+    # 拒（E0606），浮点 dtype 按该侧定型（合法）。
     if lf == "pending" or rf == "pending":
+        pend = left if lf == "pending" else right
+        pend_node = left_node if lf == "pending" else right_node
         dtype_t = right if rf == "dtype" else left
+        d = dtype_of(dtype_t)
+        if d in _INT_DTYPES:
+            inc.report("E0606", _node_of(pend_node, report_node),
+                       _pending_context_note(pend, f"整型 dtype（{d}）位置"))
+            return dtype_t  # 近似取 dtype 侧（外层组合继续判定）
+        if pend.tag == "inf" and d == "f8e4m3":
+            inc.report("E0606", _node_of(pend_node, report_node),
+                       "无穷常量不能出现在 f8e4m3 位置（OCP FP8 E4M3 无"
+                       "无穷表示，max finite ±448）；使用 f16/bf16/f32 或"
+                       "有限常量")
+            return dtype_t
         return _combine(dtype_t, dtype_t, op, report_node, inc, is_div)
 
     # dtype 家族 ⊗ dtype 家族。
@@ -200,6 +219,16 @@ def _dim_is_one(dim) -> bool:
     if isinstance(dim, ConstDim) and dim.value == 1:
         return True
     return dim_constant(dim) == 1
+
+
+def _pending_context_note(pend, context: str) -> str:
+    """待定型常量出现在非浮点 dtype 语境的 E0606 建议文案（R2/R4）。"""
+    if pend.tag == "inf":
+        return (f"无穷常量不能出现在{context}（无穷无整数表示）；与浮点 "
+                "dtype 家族值（f16/bf16/f32）运算按该 dtype 定型，或经 "
+                "tis.full 构造")
+    return (f"float 字面量只在浮点 dtype 语境合法，不能出现在{context}；"
+            "与浮点 dtype 家族值运算后按该 dtype 定型，或经 tis.full 构造")
 
 
 def _record_fold(left_node, right_node, op_name, report_node, inc):

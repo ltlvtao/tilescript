@@ -229,13 +229,22 @@ def _aug_assign(stmt, inc, rejections):
     运算违规报 E06xx；展开后再绑定不等价构造 E0303 并择一（R7 同位置双
     命中只报 E0303）。"""
     n0 = len(rejections)
-    inc.infer(stmt.value)  # 值表达式数值域检查（嵌套算术/BOOL 逃逸）
     if not isinstance(stmt.target, ast.Name):
+        inc.infer(stmt.value)  # 非名目标：值表达式数值域检查仍承载
         return  # Subscript/Attribute 目标：M1 无承载（执行段形态域）
     bound = inc.env.get(stmt.target.id)
     if bound is None or treats_as_unknown(bound):
-        return  # 无绑定基线 / UNKNOWN 基线：运算面已检查，再绑定无基线
-    result = binary_ops.arith_operands(bound, stmt.value, stmt.op, stmt, inc)
+        inc.infer(stmt.value)  # 无绑定基线：仅运算面（值侧嵌套检查）
+        return
+    # 有基线路径：arith_operands 内部对 stmt.value 的单次推断承载全部数值
+    # 域检查（嵌套算术/原语调用/BOOL 逃逸）——外部不得再预推断（同节点
+    # 双重推断会产生同位置同码重复条目，违反 R7 每码恰一条）。值表达式
+    # 开帧：非 infer 入口同样承载 R7 同表达式同码合并（300 越界与整型
+    # dtype 语境的 E0606 合并为一条）。
+    result = inc.framed(
+        stmt.value,
+        lambda: binary_ops.arith_operands(bound, stmt.value, stmt.op,
+                                          stmt, inc))
     if treats_as_unknown(result):
         return
     if not _compatible(result, bound):

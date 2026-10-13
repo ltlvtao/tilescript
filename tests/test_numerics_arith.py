@@ -201,6 +201,27 @@ class TestBroadcast:
 class TestAugAssign:
     """tasks 2.2 后半：增强赋值等价展开（spec R1 Scenario 10 + 增强面）。"""
 
+    def test_aug_nested_violating_value_single_entry(self):
+        """S *= Q + 16（嵌套混家族值、等价再绑定）：恰一条 E0601——code
+        review cycle 1 blocker 回归（AugAssign 值双重推断曾致同位置同码
+        两条，违反 R7 每码恰一条）。"""
+        rs = _check("""\
+    S = tis.zeros((4,), f32, Register)
+    Q = tis.zeros((4,), f32, Register)
+    S *= Q + 16
+""")
+        assert _codes(rs) == ["E0601"]
+
+    def test_aug_nested_full_value_merged_single_entry(self):
+        """T_i8 *= full((1,), 300, i8) * 2.0：恰一条 E0606（300 越界与
+        2.0×整型 dtype 语境同帧同码合并；近似结果等价保留 E06xx）——
+        blocker 回归同上。"""
+        rs = _check("""\
+    T = tis.zeros((4,), i8, Register)
+    T *= tis.full((1,), 300, i8, Register) * 2.0
+""")
+        assert _codes(rs) == ["E0606"]
+
     def test_aug_scalar_legal(self):
         """S *= scale 等价展开合法（Scenario 10）。"""
         rs = _check("""\

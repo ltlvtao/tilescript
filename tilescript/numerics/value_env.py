@@ -12,11 +12,13 @@ E0303 落在 `_delegate.rejections` 不进 sink——数值段 env 比类型段�
 `constants`（依赖方向：value_env → {binary_ops, constants}，
 binary_ops → constants，无环）。
 
-R7 合并帧（`_Frame`）：同一顶层算术/比较/逻辑表达式内，操作数级违规
-（E0601–E0605）按码聚合；收帧时**每码恰一条**（不同码各报各条——按段内
-序），同码多操作数合并为一条并列出全部违规操作数位置（R7「同表达式
-多个操作数同类违规合并」）；「同位置多码取段内首个」由 report.finalize
-的 (line, col, order) 去重承载。E0606/E0303 为位置级，不经帧。
+R7 合并帧（`_Frame`）：同一顶层算术/比较/逻辑表达式内，表达式级违规
+（E0601–E0606——含 tis.full value 常量绑定）按码聚合；收帧时**每码恰一
+条**（不同码各报各条——按段内序），同码多操作数合并为一条并列出全部
+违规操作数位置（R7「同表达式多个操作数同类违规合并」——不按码排除）；
+「同位置多码取段内首个」由 report.finalize 的 (line, col, order) 去重
+承载。E0303 与语句级绑定拒绝（裸绑定/再绑定/注解绑定）为位置级，
+不经帧。
 """
 
 import ast
@@ -24,6 +26,7 @@ import math
 
 from ..frontend import report
 from ..primitives import results as prim_results
+from ..primitives.compute_ops import COMPUTE_PRIMS
 from ..primitives.compute_ops import _bind_args as _bind_compute
 from ..primitives.memory_ops import _bind_args as _bind_memory
 from ..typecheck.infer import _mismatch_suggestion
@@ -53,11 +56,6 @@ CATEGORIES = {
     "E0605": "bool-closure",
     "E0606": "const-binding",
 }
-
-# 计算六原语（参数集表在 primitives/compute_ops；其余 tis.* 原语在
-# primitives/memory_ops——两表同名 _PRIM_SPECS，按原语域分派绑定器）。
-_COMPUTE_PRIMS = frozenset(
-    {"dot", "reduce", "maximum", "exp", "log", "transpose"})
 
 
 class _Frame:
@@ -142,11 +140,11 @@ class NumericsInferencer:
                 return PendingConst("inf", math.inf)  # 预置名（env 遮蔽优先）
             return self._delegate.infer(node)
         if isinstance(node, ast.BinOp):
-            return self._framed(node, lambda: binary_ops.arith(node, self))
+            return self.framed(node, lambda: binary_ops.arith(node, self))
         if isinstance(node, ast.Compare):
-            return self._framed(node, lambda: binary_ops.compare(node, self))
+            return self.framed(node, lambda: binary_ops.compare(node, self))
         if isinstance(node, ast.BoolOp):
-            return self._framed(node, lambda: binary_ops.boolop(node, self))
+            return self.framed(node, lambda: binary_ops.boolop(node, self))
         if isinstance(node, ast.UnaryOp):
             return binary_ops.unary(node, self)
         if isinstance(node, ast.Call):
@@ -156,8 +154,12 @@ class NumericsInferencer:
             return self._delegate.infer(node)
         return self._delegate.infer(node)  # Attribute 等：委托
 
-    def _framed(self, root, compute):
-        """顶层数值域表达式开帧；子表达式违规进外层帧（嵌套合并）。"""
+    def framed(self, root, compute):
+        """顶层数值域表达式开帧；子表达式违规进外层帧（嵌套合并）。
+
+        公开入口：语句层等价展开路径（AugAssign 值）与 infer 分派共用，
+        保证非 infer 入口的表达式同样承载 R7 同帧合并。
+        """
         if self._frame is not None:
             return compute()
         self._frame = _Frame(root)
@@ -233,9 +235,10 @@ class NumericsInferencer:
                             "布尔值仅限条件语境封闭集；不能作为原语实参")
         if attr in ("alloc_shared", "zeros", "full", "make_tensor", "cast",
                     "dot", "reduce", "maximum", "exp", "log", "transpose"):
-            # 计算六原语的参数集表在 compute_ops、其余在 memory_ops
-            # （两表同名 _PRIM_SPECS，按原语域分派）。
-            bind = _bind_compute if attr in _COMPUTE_PRIMS else _bind_memory
+            # 计算原语的参数集表在 compute_ops、其余在 memory_ops（两表
+            # 同名 _PRIM_SPECS；按公共 COMPUTE_PRIMS 清单分派——清单扩展
+            # 的同步义务由 compute_ops 侧承载）。
+            bind = _bind_compute if attr in COMPUTE_PRIMS else _bind_memory
             slots, err = bind(node, attr)
             if err is not None:
                 return UNKNOWN  # 参数集违规：原语段已拒（防御让渡）

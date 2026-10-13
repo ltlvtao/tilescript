@@ -55,9 +55,10 @@ class TestPending:
         assert _codes(rs) == ["E0606"]
 
     def test_pending_times_int_family_rejected(self):
-        """待定型 × int 家族 E0601（无 dtype 语境不可定型）。"""
+        """待定型 × int 家族 E0606（R2——float 字面量只在浮点 dtype 语境
+        合法；int 家族位置不可定型）。"""
         rs = _check("    x = 1.5 + seq_len\n")
-        assert _codes(rs) == ["E0601"]
+        assert _codes(rs) == ["E0606"]
 
     def test_rebind_float_to_f32_legal(self):
         """x 已绑 f32；x = 1.5 按已绑定 dtype 定型（R4 Scenario 5）。"""
@@ -173,8 +174,72 @@ class TestFullValue:
         assert _codes(rs) == ["E0606"]
 
 
+class TestPendingOperandContext:
+    """code review cycle 1 major 回归：R4 位置②待定型常量的算术操作数位
+    语境裁决（整型 dtype / int 家族 / f8e4m3×inf 拒；浮点 dtype 定型）。"""
+
+    def test_pending_times_int_dtype_rejected(self):
+        """S_i8 * 2.0 → E0606（float 字面量 × 整型 dtype 语境）。"""
+        rs = _check("    A = tis.zeros((4,), i8, Register)\n"
+                    "    B = A * 2.0\n")
+        assert _codes(rs) == ["E0606"]
+
+    def test_inf_times_int_dtype_rejected(self):
+        """S_i8 * inf → E0606（无穷无整数表示）。"""
+        rs = _check("    A = tis.zeros((4,), i8, Register)\n"
+                    "    B = A * inf\n")
+        assert _codes(rs) == ["E0606"]
+        assert "无穷" in rs[0].suggestion
+
+    def test_inf_times_f8e4m3_rejected(self):
+        """S_f8e4m3 * inf → E0606（E4M3 无无穷表示）。"""
+        rs = _check("    A = tis.zeros((4,), f8e4m3, Register)\n"
+                    "    B = A * inf\n")
+        assert _codes(rs) == ["E0606"]
+        assert "448" in rs[0].suggestion or "E4M3" in rs[0].suggestion
+
+    def test_inf_plus_int_family_rejected(self):
+        """seq_len + inf → E0606（int 家族位置——R2 明文，非 E0601）。"""
+        rs = _check("    x = seq_len + inf\n")
+        assert _codes(rs) == ["E0606"]
+
+    def test_float_literal_plus_int_family_rejected(self):
+        """seq_len + 1.5 → E0606（float 字面量不在 int 家族语境合法）。"""
+        rs = _check("    x = seq_len + 1.5\n")
+        assert _codes(rs) == ["E0606"]
+
+    def test_pending_times_f8e4m3_legal(self):
+        """S_f8e4m3 * 2.0 零拒绝（f8e4m3 是浮点 dtype——R2 明文 float
+        字面量合法，仅 inf 拒）。"""
+        rs = _check("    A = tis.zeros((4,), f8e4m3, Register)\n"
+                    "    B = A * 2.0\n")
+        assert rs == []
+
+    def test_inf_times_f32_legal(self):
+        """S_f32 * inf 零拒绝（IEEE 标准精度浮点定型）。"""
+        rs = _check("    A = tis.zeros((4,), f32, Register)\n"
+                    "    B = A * inf\n")
+        assert rs == []
+
+    def test_float_literal_plus_f32_scalar_legal(self):
+        """scale + 1.5 零拒绝（f32 标量按 dtype 定型）。"""
+        rs = _check("    x = scale + 1.5\n")
+        assert rs == []
+
+
 class TestFold:
     """tasks 5.1：comptime 折叠与 cdiv 值（R5 Scenario 1/2/3）。"""
+
+    def test_comptime_bool_default_folds(self):
+        """F: comptime[int] = True 默认值按 R3 取 1 入值表：F*200+55 折叠
+        255 绑 i8 value 位 → E0606（code review cycle 1 minor 回归）。"""
+        source = _KERNEL_TMPL.replace(
+            "BC: comptime[int] = 64):",
+            "BC: comptime[int] = 64, F: comptime[int] = True):",
+        ).format(body="    A = tis.full((1,), F * 200 + 55, i8, Register)")
+        rs = numerics_check(ast.parse(source))
+        assert _codes(rs) == ["E0606"]
+        assert "255" in rs[0].suggestion
 
     def test_cdiv_all_comptime_folds(self):
         """cdiv(128, 64) 值 2——值域联动证明（300/1 折叠 300 越界 i8）。"""

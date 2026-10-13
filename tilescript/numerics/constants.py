@@ -48,8 +48,9 @@ class PendingConst:
 def kernel_comptime_values(tree: ast.Module) -> dict:
     """kernel comptime[int] 形参默认值 → {名: int}（值表起点）。
 
-    E0104 只接受单个 int 字面量默认值（常量表达式形式被语法段拒），故
-    仅记录 Constant int 形态；无默认值或非 comptime[int] 注解不记。
+    E0104 只接受单个 int 字面量与 `True`/`False` 默认值（常量表达式形式
+    被语法段拒）；布尔默认值按 R3 取整数值（True→1/False→0）。无默认值
+    或非 comptime[int] 注解不记。
     """
     kernel = find_kernel(tree)
     if kernel is None:
@@ -65,8 +66,9 @@ def kernel_comptime_values(tree: ast.Module) -> dict:
     for arg, default in pairs:
         if (_is_comptime_int_annotation(arg.annotation)
                 and isinstance(default, ast.Constant)
-                and type(default.value) is int):
-            values[arg.arg] = default.value
+                and (type(default.value) is int
+                     or isinstance(default.value, bool))):
+            values[arg.arg] = int(default.value)
     return values
 
 
@@ -108,7 +110,8 @@ def full_value_verdict(value_node, dtype_node, inc):
     调用层报 E0605。值类分派：int 家族编译期常量按目标 dtype 值域（浮点
     dtype 整到浮按 R6 舍入，不拒）；float 字面量限浮点 dtype；inf 限
     IEEE 标准精度浮点 dtype；运行期 int 拒（无原语路径）；dtype 标量须
-    同 dtype（无隐式转换）。
+    同 dtype（无隐式转换）。违规经 `inc.report`——帧活跃（外层表达式）
+    时与同码违规合并为一条（R7 同表达式同类违规合并）。
     """
     if not (isinstance(dtype_node, ast.Name) and dtype_node.id in DTYPES):
         return  # dtype 实参形态违规：原语段 E0406 已拒
@@ -120,34 +123,34 @@ def full_value_verdict(value_node, dtype_node, inc):
         if dtype in INT_RANGES:
             lo, hi = INT_RANGES[dtype]
             if not lo <= value <= hi:
-                inc.reject(value_node, "E0606", "const-binding",
+                inc.report("E0606", value_node,
                            f"常量值 {value} 超出 {dtype} 补码值域 "
                            f"[{lo}, {hi}]；核对值域或改用更宽整型 dtype")
         return  # 浮点 dtype：整到浮 roundTiesToEven（R6 行为承诺），不拒
 
     t = inc.infer(value_node)
     if t == ScalarType(INT):
-        inc.reject(value_node, "E0606", "const-binding",
+        inc.report("E0606", value_node,
                    "运行期 int 标量不能绑定 dtype 标量位置（运行期整型到"
                    " dtype 转换无原语路径）；由宿主侧传入目标 dtype 标量或"
                    "经 Tensor 显式 tis.cast 路径")
         return
     if isinstance(t, ScalarType) and t.kind in DTYPES:
         if t.kind != dtype:
-            inc.reject(value_node, "E0606", "const-binding",
+            inc.report("E0606", value_node,
                        f"dtype 标量（{t.kind}）与目标 dtype（{dtype}）不同；"
                        "家族内无隐式转换，经显式 tis.cast 路径转换后取值")
         return  # 同 dtype 标量合法
     if isinstance(t, PendingConst):
         if dtype in FLOAT_DTYPES:
             if t.tag == "inf" and dtype not in IEEE_FLOAT_DTYPES:
-                inc.reject(value_node, "E0606", "const-binding",
+                inc.report("E0606", value_node,
                            "无穷常量不能绑定 f8e4m3 位置（OCP FP8 E4M3 无"
                            "无穷表示，max finite ±448）；使用 f16/bf16/f32 "
                            "或有限常量")
             return  # float 字面量正确舍入 / inf 绑 IEEE 浮点（R2/R6 承诺）
         note = "无穷常量无整数表示" if t.tag == "inf" else "float 字面量"
-        inc.reject(value_node, "E0606", "const-binding",
+        inc.report("E0606", value_node,
                    f"浮点常量不能绑定整型 dtype 位置（{note}）；整型位置"
                    "使用整型常量")
         return

@@ -35,11 +35,11 @@
 
 ## 7. CLI passed 联动 + 集成回归
 
-- [ ] 7.1 CLI passed（cli delta 3S）：五段零命中 → `{"status": "passed"}` 单字段退出码 0；重复运行逐字节一致；拒绝优先（E06xx → rejected 退出码 1）；既有 incomplete 断言联动翻转——验证：`tests/test_cli.py` 增补与联动更新（≥4 例）——已验证：`.venv/bin/python -m pytest tests/test_cli.py -q` 16 passed（TestR3HonestExit 5 例：passed 最小形态/逐字节一致/E0606 拒绝优先/monkeypatch 过渡期 incomplete/status 封闭值；联动翻转 3 处——扩展名/子进程/status 断言）
-- [ ] 7.2 FLASH_ATTENTION 五段零拒绝 → passed 回归（全合法面含算术/比较/常量）；E06xx 注入面；两目标语言层一致性（E06xx 无目标分化——`check_module` 无 target 的行为注记）——验证：`tests/test_integration.py` 增补与联动更新（≥3 例）——已验证：`.venv/bin/python -m pytest tests/test_integration.py -q` 16 passed（TestFlashAttentionFiveStages 更名+CLI passed 翻转、TestNumericsInjection 2 例——注入恰一条 E0602 + 两目标逐条一致）；修复两处实现缺陷——compute 六原语 `_bind_args` 分派（memory/compute 两套 _PRIM_SPECS）与 maximum 槽名 a/b；再绑定 env 语义（让渡路径改写为源类型，拒绝路径保旧——`x = 5` 后 `x + 16` 不按陈旧 f32 误报）
-- [ ] 7.3 `.venv/bin/python -m pytest -q` 全量通过；`npx openspec validate --all --strict` 通过；主智能体读全部 diff → commit 候选代码——已验证：579 passed + strict 10/10；全部 diff 已读（cli/pipeline 生产面最小改动；numerics 包四文件编译检查 + 未用 import 清理；测试五文件）；待 commit
+- [x] 7.1 CLI passed（cli delta 3S）：五段零命中 → `{"status": "passed"}` 单字段退出码 0；重复运行逐字节一致；拒绝优先（E06xx → rejected 退出码 1）；既有 incomplete 断言联动翻转——验证：`tests/test_cli.py` 增补与联动更新（≥4 例）——已验证：`.venv/bin/python -m pytest tests/test_cli.py -q` 16 passed（TestR3HonestExit 5 例：passed 最小形态/逐字节一致/E0606 拒绝优先/monkeypatch 过渡期 incomplete/status 封闭值；联动翻转 3 处——扩展名/子进程/status 断言）
+- [x] 7.2 FLASH_ATTENTION 五段零拒绝 → passed 回归（全合法面含算术/比较/常量）；E06xx 注入面；两目标语言层一致性（E06xx 无目标分化——`check_module` 无 target 的行为注记）——验证：`tests/test_integration.py` 增补与联动更新（≥3 例）——已验证：`.venv/bin/python -m pytest tests/test_integration.py -q` 16 passed（TestFlashAttentionFiveStages 更名+CLI passed 翻转、TestNumericsInjection 2 例——注入恰一条 E0602 + 两目标逐条一致）；修复两处实现缺陷——compute 六原语 `_bind_args` 分派（memory/compute 两套 _PRIM_SPECS）与 maximum 槽名 a/b；再绑定 env 语义（让渡路径改写为源类型，拒绝路径保旧——`x = 5` 后 `x + 16` 不按陈旧 f32 误报）
+- [x] 7.3 `.venv/bin/python -m pytest -q` 全量通过；`npx openspec validate --all --strict` 通过；主智能体读全部 diff → commit 候选代码——已验证：579 passed + strict 10/10；全部 diff 已读（cli/pipeline 生产面最小改动；numerics 包四文件编译检查 + 未用 import 清理；测试五文件）；commit d17b041（23 文件，+2794/−53）
 
 ## 8. 流程闭环
 
 - [x] 8.1 设计语义审查（`reviews/design-review.jsonl`，三轮上限）→ H1 人工确认（`reviews/h1.jsonl`）
-- [ ] 8.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）
+- [ ] 8.2 代码语义审查（`reviews/code-review.jsonl`，三轮上限）→ H2 人工确认（`reviews/h2.jsonl`）→ push → 归档 + 长期基线刷新（design「长期基线刷新计划」）——cycle 1 round 1 CHANGES_REQUESTED（4 findings：blocker AugAssign 值双重推断 / major 待定型常量算术操作数位语境缺失 / minor comptime[int] 布尔默认值不入值表 / minor 私有 _COMPUTE_PRIMS 复制）已全部修复：`_aug_assign` 分支互斥 + 值表达式开帧（`framed` 公开化）、binary_ops 判定序 8 步 + pending 语境 E0606 分支、constants 收 bool 默认值 + full_value_verdict 走 report 进帧合并（R7 同表达式同码合并不排除 E0606——实现口径修正）、value_env 消费公共 COMPUTE_PRIMS；回归测试 +11 例（TestPendingOperandContext 8 例、TestAugAssign 2 例、TestFold 1 例）+ 联动翻转 1 处——已验证：`.venv/bin/python -m pytest -q` 590 passed + strict 10/10
